@@ -48,22 +48,19 @@ for a human audience, and `--theme=high-contrast` for a washed-out projector.
   the dimension where their evidence separates most — both contexts survive, re-promoted through
   the genuine pipeline, not deleted.
 
-## Milestones built this session
+## Milestones built across sessions
 
-M0–M7 (`docs/PROGRESS.md` has the full per-session log). Build order deviated from BLUEPRINT's
-strict M0→M7 — M7 (TUI + demo scripts) was built before M6 (chaos injector + partition semantics)
-on explicit instruction, then M6 followed in a later session. One gap remains from that ordering:
-`demo-chaos`'s narrated Act 3 stops after Excision and does not (yet) dramatize partition/heal/
-Refine live — `chaos/injector.py`, `fabric.arbitration.refine_split`, and
-`fabric.lifecycle.demote_provisional` are implemented and proven in `tests/test_dilemma_c.py`, just
-not wired into that demo script's narration/pacing. `docs/DEMO_RUNBOOK.md`'s Act 3 partition/heal
-beats (8:45–10:15) are therefore not reproduced by `make demo-chaos`, though the mechanism itself is
-real and tested.
+M0–M7 are all complete (`docs/PROGRESS.md` has the full per-session log). Build order deviated from
+BLUEPRINT's strict M0→M7 — M7 (TUI + demo scripts) was built before M6 (chaos injector + partition
+semantics) on explicit instruction; M6 followed in a later session and was then wired into
+`demo-chaos`'s narrated Act 3 in the session after that, closing the gap.
 
-Everything else in the RUNBOOK — the amnesia problem, the first ratchet click, crash/reload with
-memory (a *live* re-proof of milestone M2's persistence guarantee inside a running mesh), the
-poison/Sentinel/bisect/Excision sequence — is real, and runs on fixed seeds byte-identically across
-runs.
+`make demo-ratchet` reproduces the RUNBOOK's Acts 0–2 (the amnesia problem, the first ratchet click,
+crash/reload with memory — a *live* re-proof of milestone M2's persistence guarantee inside a
+running mesh) and `make demo-chaos` reproduces Act 3 in full: blatant + subtle poison, Sentinel,
+bisect, Excision, then a chaos-injected partition, heal with side-by-side identical arbitration,
+Refine, and minority-island cert demotion. Every beat is real — no faked output — and runs on fixed
+seeds byte-identically across runs.
 
 ## Documentation
 

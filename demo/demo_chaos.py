@@ -7,11 +7,13 @@ Sentinel probe catches its off-claim KPI regression within one probe period; bis
 culprit; Excision tombstones it and quarantines its one organic descendant — twelve capsules to ten,
 never to zero.
 
-Honest scoping (this build): partition/heal/Refine and provisional-cert demotion (BLUEPRINT §6.2,
-§7.4-7.5, milestone M6) are implemented and proven in `tests/test_dilemma_c.py`
-(`chaos/injector.py`, `fabric.arbitration.refine_split`, `fabric.lifecycle.demote_provisional`) but
-are not yet dramatized in this narrated Act 3 — the script says so explicitly at that beat instead
-of silently omitting it.
+Continues into partition/heal/Refine and minority-cert demotion (BLUEPRINT §6.2, §7.4-7.5, milestone
+M6): a chaos-injected partition splits the mesh into two islands, each of which discovers and
+mesh-promotes its own genuinely-good capsule for the same congestion class through the real
+pipeline; heal reconciles every node via the ordinary CRDT merge and every node resolves the
+resulting overlap identically; persistent overlap triggers Refine, sharpening both capsules' scopes
+along the dimension where their evidence separates most; the minority island's cert demotes on heal
+and re-earns ACTIVE, the majority island's does not. Same mechanism `tests/test_dilemma_c.py` proves.
 
 Default output is plain, deterministic text (same discipline as `demo_smoke.py`/`demo_ratchet.py`).
 `--tui` drives `ui.tui.Dashboard` live; `--pace=live` inserts RUNBOOK narration beats.
@@ -26,6 +28,14 @@ import time
 
 from agents.strategist import HeuristicStrategist
 from agents.agent import AGENTS, FabricAgent
+from chaos.injector import Partition, reconcile_within_partition
+from fabric.arbitration import (
+    OverlapTracker,
+    active_matches,
+    arbitrate,
+    record_overlap,
+    refine_split,
+)
 from fabric.capsule import (
     Capsule,
     Claim,
@@ -41,12 +51,19 @@ from fabric.config import REGISTRY_VERSION, REP_ISOLATION_FLOOR
 from fabric.excision import excise, reputation
 from fabric.gossip import ShadowLedger, derive_state, sign_shadow_record
 from fabric.jury import replay, sample_episode
-from fabric.lifecycle import ShadowTracker, shadow_step, submit
+from fabric.lifecycle import (
+    ShadowTracker,
+    demote_provisional,
+    provisional_cert_demotion,
+    shadow_step,
+    submit,
+)
 from fabric.pawl import pawl_check
 from fabric.probes import Sentinel, bisect_culprit, suspects
 from fabric.store import Store
 from ui.events import EventStream
 from ui.tui import Dashboard, DashboardState, build_fabric_rows, build_mesh_rows
+from world.taskgen import Task
 
 CHAOS_SEED = 909090
 ROGUE = "agent:site-e"
@@ -94,6 +111,19 @@ _HONEST_SPECS = [
     ("cert_expiry_storm", {"site_class": ["dc"]},
      {"retry_backoff_ms": 200, "block_ttl_s": 120}, "agent:site-c"),
 ]
+
+# Partition/heal/Refine (RUNBOOK Act 3, 8:45-10:15): two islands, each with its own genuinely-good,
+# jury-passable congestion-class rule whose declared band overlaps the other's on [5.0, 6.0] —
+# prototype-verified the same way as tests/test_dilemma_c.py (both pass 3/3 jury quorum honestly
+# measured). Island X is the minority side (2 of 5 nodes): its cert demotes on heal; island Y (3 of
+# 5) is the majority side and stays authoritative.
+ISLAND_X = frozenset({"agent:site-a", "agent:site-b"})
+ISLAND_Y = frozenset({"agent:site-c", "agent:site-d", "agent:site-e"})
+PARTITION = Partition(islands=frozenset({ISLAND_X, ISLAND_Y}))
+X_DIMS = {"traffic_gbps": [1.0, 6.0], "site_class": ALL_SITES}
+X_RULE = {"rate_limit_pps": 4000, "inspection_depth": 3}
+Y_DIMS = {"traffic_gbps": [5.0, 12.0], "site_class": ALL_SITES}
+Y_RULE = {"rate_limit_pps": 8000, "inspection_depth": 3}
 
 _BEAT_SECONDS = 3.0
 
@@ -147,6 +177,36 @@ def _active(store: Store, ledger: ShadowLedger, capsule_id: str) -> bool:
     return derive_state(store, ledger, capsule_id, NODE_IDS).state == LifecycleState.ACTIVE
 
 
+def _fill_island_shadow(mesh: dict, island: frozenset, capsule: Capsule, dims: dict,
+                         base_seed: int, sim_time: float, per_node: int = 3) -> None:
+    """Real shadow (`shadow_step`, no stuffed wins) for every member of `island`, replicated into
+    each member's own local ledger — as ordinary anti-entropy would already have produced within an
+    island that has been reconciling among itself (same pattern as `tests/test_dilemma_c.py`)."""
+    records = []
+    for node in sorted(island):
+        for i in range(per_node):
+            task = sample_episode(
+                capsule.context.incident_class, dims, base_seed + _det_int(node) % 900 + i * 31,
+            )
+            tracker = shadow_step(capsule, task, STRATEGIST, ShadowTracker())
+            records.append(sign_shadow_record(
+                node, capsule.capsule_id, task.seed, task.incident_class, task.params,
+                tracker.wins == 1, tracker.invariant_hits, sim_time,
+            ))
+    for node in island:
+        for record in records:
+            mesh[node][1].add(record)
+
+
+def _overlap_task(traffic: float, seed: int) -> Task:
+    return Task(
+        task_id=f"overlap-{seed}", incident_class="ddos_syn_flood", site_class="campus",
+        params={"incident_class": "ddos_syn_flood", "site_class": "campus", "traffic_gbps": traffic,
+                "device_count": 200},
+        arrival_sim=0.0, seed=seed,
+    )
+
+
 def _beat(pace: str, label: str) -> None:
     print(f"  … {label}")
     if pace == "live":
@@ -183,7 +243,6 @@ def build_prewarmed_fabric(events: EventStream) -> tuple[Store, ShadowLedger, Ca
         agent_id="site-a", site_class="branch", strategist=HeuristicStrategist(), events=events,
         agent_ids=AGENT_IDS, node_ids=NODE_IDS, store=store, ledger=ledger,
     )
-    from world.taskgen import Task
 
     # DECISION: traffic=6.0 sits inside the poison's [4.0, 9.0] band but outside every honest
     # capsule's band (nearest honest bands are [2.5,4.5] and [7.0,9.5]) — so this task is
@@ -204,6 +263,49 @@ def build_prewarmed_fabric(events: EventStream) -> tuple[Store, ShadowLedger, Ca
     _mesh_shadow(store, ledger, descendant, descendant.context.dims, base_seed=9500, sim_time=tick + 8.0)
     assert _active(store, ledger, descendant.capsule_id)
     return store, ledger, poison, descendant
+
+
+def build_partition_scenario(
+    events: EventStream, sim_time: float
+) -> tuple[dict[str, tuple[Store, ShadowLedger]], Capsule, Capsule]:
+    """RUNBOOK Act 3, 8:45: chaos splits the mesh into two islands. Each island discovers,
+    validates, and mesh-promotes its own genuinely-good capsule for the same congestion class
+    through the real pipeline (real Pawl, real jury quorum, real shadow) while the partition blocks
+    anti-entropy between them — the fault never reaches into a store (BLUEPRINT §12). Each cert's
+    `partition_view` is the island's own reachable set (not the full mesh), which is what makes the
+    later minority-cert demotion beat real rather than synthetic."""
+    mesh = {aid: (Store(), ShadowLedger()) for aid in AGENT_IDS}
+    x_seeds = [31000 + i * 13 for i in range(6)]
+    y_seeds = [32000 + i * 13 for i in range(6)]
+    cap_x = _measured_capsule("ddos_syn_flood", X_DIMS, X_RULE, x_seeds, "agent:site-a")
+    cap_y = _measured_capsule("ddos_syn_flood", Y_DIMS, Y_RULE, y_seeds, "agent:site-c")
+
+    store_x, _ = mesh["agent:site-a"]
+    state, reason = submit(cap_x, store_x, AGENT_IDS, sim_time, strategist=STRATEGIST,
+                            partition_view="|".join(sorted(ISLAND_X)), emit=events.emit)
+    assert state == LifecycleState.CANDIDATE, reason
+    store_y, _ = mesh["agent:site-c"]
+    state, reason = submit(cap_y, store_y, AGENT_IDS, sim_time + 0.5, strategist=STRATEGIST,
+                            partition_view="|".join(sorted(ISLAND_Y)), emit=events.emit)
+    assert state == LifecycleState.CANDIDATE, reason
+
+    # CANDIDATE reaches same-island peers only — a partitioned author cannot push across the split.
+    for node in ISLAND_X - {"agent:site-a"}:
+        mesh[node][0].add(cap_x)
+        mesh[node][0].set_meta(cap_x.capsule_id, store_x.lifecycle_of(cap_x.capsule_id), sim_time)
+    for node in ISLAND_Y - {"agent:site-c"}:
+        mesh[node][0].add(cap_y)
+        mesh[node][0].set_meta(cap_y.capsule_id, store_y.lifecycle_of(cap_y.capsule_id), sim_time + 0.5)
+
+    _fill_island_shadow(mesh, ISLAND_X, cap_x, X_DIMS, base_seed=6100, sim_time=sim_time + 1.0)
+    _fill_island_shadow(mesh, ISLAND_Y, cap_y, Y_DIMS, base_seed=6200, sim_time=sim_time + 1.5)
+
+    reconcile_within_partition(mesh, PARTITION)
+    assert all(_active(*mesh[n], cap_x.capsule_id) for n in ISLAND_X)
+    assert all(_active(*mesh[n], cap_y.capsule_id) for n in ISLAND_Y)
+    assert not any(cap_y.capsule_id in mesh[n][0].adds for n in ISLAND_X)
+    assert not any(cap_x.capsule_id in mesh[n][0].adds for n in ISLAND_Y)
+    return mesh, cap_x, cap_y
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -301,15 +403,100 @@ def main(argv: list[str] | None = None) -> None:
                        "revoked capsule's cert are slashed too.")
         _beat(args.pace, "excision complete")
 
-        print("\n## Partition + heal (BLUEPRINT §6.2, milestone M6)")
+        print("\n## Partition (BLUEPRINT §6.2, §7.5, milestone M6)")
         narrate(
             28.0,
-            "M6 (chaos injector + partition/heal + Refine + provisional-cert demotion) is now "
-            "built and proven in tests/test_dilemma_c.py — chaos/injector.py, "
-            "fabric.arbitration.refine_split, fabric.lifecycle.demote_provisional — but not yet "
-            "dramatized in this narrated Act 3; see docs/PROGRESS.md. Everything above this line "
-            "(poison, Sentinel, bisect, Excision) is real, and so is everything M6 proves in its "
-            "own test suite.",
+            "Chaos splits the mesh: {site-a, site-b} | {site-c, site-d, site-e}. Both islands keep "
+            "working; each learns a different fix for the same congestion class — valid for their "
+            "local parameter regimes.",
+        )
+        mesh, cap_x, cap_y = build_partition_scenario(events, 28.5)
+        events.emit("PARTITION", 28.5, islands=[sorted(ISLAND_X), sorted(ISLAND_Y)])
+        narrate(
+            29.5,
+            f"Island X: {cap_x.capsule_id[:10]} ACTIVE locally. Island Y: {cap_y.capsule_id[:10]} "
+            "ACTIVE locally. Neither is visible on the other island — both sides are right, for "
+            "their contexts.",
+        )
+        _beat(args.pace, "partition confirmed")
+
+        print("\n## Heal")
+        reconcile_within_partition(mesh, None)  # heal: partition=None is unconditional full reconcile
+        events.emit("HEAL", 30.0, islands_merged=[sorted(ISLAND_X), sorted(ISLAND_Y)])
+        overlap_task = _overlap_task(5.5, seed=7001)
+        arbitration_lines = []
+        winners = set()
+        for node in ("agent:site-a", "agent:site-e"):
+            matches = active_matches(*mesh[node], overlap_task, NODE_IDS)
+            winner = arbitrate(matches)
+            winners.add(winner.capsule.capsule_id)
+            arbitration_lines.append(f"{node} decides: {winner.capsule.capsule_id[:10]}")
+        assert len(winners) == 1, f"every node must pick the same winner, got {winners}"
+        narrate(
+            30.0,
+            "Heal: stores union (CRDT — nothing to merge by construction); overlap detected; every "
+            "node runs the same pure arbitrate() —  " + "  |  ".join(arbitration_lines) + "  — identical.",
+        )
+        _beat(args.pace, "heal converged")
+
+        print("\n## Refine")
+        tracker = OverlapTracker()
+        triggered = False
+        winner_app = loser_app = None
+        for seed in (7101, 7102, 7103):
+            task = _overlap_task(5.5, seed)
+            matches = active_matches(*mesh["agent:site-a"], task, NODE_IDS)
+            winner_app = arbitrate(matches)
+            loser_app = next(m for m in matches if m.capsule.capsule_id != winner_app.capsule.capsule_id)
+            tracker, triggered = record_overlap(tracker, winner_app, loser_app)
+        assert triggered
+        refine_result = refine_split(winner_app, loser_app)
+        events.emit(
+            "REFINE", 31.0, dimension=refine_result.dimension,
+            winner_capsule=winner_app.capsule.capsule_id, loser_capsule=loser_app.capsule.capsule_id,
+            reason=refine_result.reason,
+        )
+        narrate(31.0, f"REFINE: same overlap arbitrated 3 times — {refine_result.reason}.")
+
+        refined_store, refined_ledger = mesh["agent:site-a"]
+        refined = []
+        for i, (app, dims) in enumerate(
+            ((winner_app, refine_result.winner_dims), (loser_app, refine_result.loser_dims))
+        ):
+            cap = _measured_capsule(
+                "ddos_syn_flood", dims, app.capsule.payload.rule,
+                [33000 + i * 1000 + j * 13 for j in range(6)], app.capsule.provenance.author,
+            )
+            state, reason = submit(cap, refined_store, AGENT_IDS, 31.5, strategist=STRATEGIST, emit=events.emit)
+            assert state == LifecycleState.CANDIDATE, reason
+            _fill_island_shadow({n: mesh[n] for n in ISLAND_X | ISLAND_Y}, ISLAND_X | ISLAND_Y, cap, dims,
+                                 base_seed=6300 + i * 500, sim_time=31.75)
+            assert _active(refined_store, refined_ledger, cap.capsule_id)
+            refined.append(cap)
+        narrate(
+            32.0,
+            f"Both capsules survive, scoped along {refine_result.dimension!r}: "
+            f"{refined[0].context.dims[refine_result.dimension]} vs "
+            f"{refined[1].context.dims[refine_result.dimension]}. Storage is eventual, meaning is "
+            "scoped, decisions are deterministic — a conflict is an underspecified context, not a "
+            "truth to delete.",
+        )
+        _beat(args.pace, "refine complete")
+
+        print("\n## Minority-island cert demotion")
+        mesh_size = len(AGENT_IDS)
+        cert_x = mesh["agent:site-a"][0].lifecycle_of(cap_x.capsule_id)["quorum_cert"]
+        cert_y = mesh["agent:site-c"][0].lifecycle_of(cap_y.capsule_id)["quorum_cert"]
+        demotes_x = provisional_cert_demotion(cert_x, mesh_size)
+        demotes_y = provisional_cert_demotion(cert_y, mesh_size)
+        assert demotes_x and not demotes_y
+        demote_provisional(mesh["agent:site-a"][0], cap_x, 32.5, emit=events.emit)
+        narrate(
+            32.5,
+            f"{cap_x.capsule_id[:10]}'s cert saw only {sorted(ISLAND_X)}'s {len(ISLAND_X)} nodes at cert "
+            f"time — below the mesh majority — demoted to QUARANTINED pending re-jury. "
+            f"{cap_y.capsule_id[:10]}'s cert saw {len(ISLAND_Y)} nodes, a majority — stays ACTIVE, "
+            "never silently authoritative on minority-island knowledge either way.",
         )
         _beat(args.pace, "Act 3 complete")
     finally:

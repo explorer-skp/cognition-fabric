@@ -15,6 +15,50 @@ memory between sessions: if it isn't written here, the next session doesn't know
 
 ---
 
+## S8 — 2026-07-16 (wire M6 into demo-chaos's Act 3)
+
+- **Session / date:** S8 / 2026-07-16
+- **Milestone(s) completed:** Closes the last gap from S6/S7: `demo/demo_chaos.py`'s narrated Act 3
+  now dramatizes partition → heal → Refine → minority-island cert demotion, live, after Excision.
+  M0–M7 are now all complete with no remaining known gaps against the RUNBOOK.
+- **Acceptance criterion result:** `110 passed in 0.67s` (unchanged — no fabric code touched this
+  session, only `demo/demo_chaos.py` and `README.md`). `make demo-chaos` byte-identical across two
+  runs; `--tui` and `--theme=high-contrast` both still work; `--pace=live` completes in ~99s (Act 3
+  alone), well under the RUNBOOK's Act 3 budget (270s) and the ≤12 min M7 accept criterion.
+  `make demo-smoke` and `demo-ratchet` unaffected.
+- **Files created/modified:**
+  - Modified: `demo/demo_chaos.py` (new `build_partition_scenario` — a real two-island mesh built
+    through the genuine pipeline, mirroring `tests/test_dilemma_c.py`'s pattern; new helpers
+    `_fill_island_shadow`, `_overlap_task`; `main()` gains Partition/Heal/Refine/demotion narrated
+    beats after Excision, replacing the old "not yet dramatized" stub), `README.md` (milestones
+    section updated: M0–M7 complete, no remaining gap).
+- **DECISION comments added:**
+  - `demo/demo_chaos.py` — the partition/heal/Refine beats build their OWN small two-island mesh
+    (`build_partition_scenario`), separate from the single shared `(store, ledger)` the poison/
+    Sentinel/bisect/Excision beats already use. Unifying the two into one 5-node-store-per-node mesh
+    from the start would have meant redesigning `build_prewarmed_fabric` (which several already-
+    working, already-verified beats depend on) — not worth the risk for a "wire it in" task. The two
+    scenarios are narratively sequential (Excision, then a fresh partition), so a fresh mesh reads
+    naturally rather than as an inconsistency.
+  - `demo/demo_chaos.py` — `submit()` is called with an explicit `partition_view` (the island's own
+    `sorted("|".join(...))` reachable set), not the default. Without this, the resulting quorum cert
+    would carry the *default* full 5-agent view regardless of which island authored it (`submit`'s
+    `partition_view=None` default means "full mesh" — correct behavior for every other beat in this
+    codebase, but it would make the later minority-cert-demotion check vacuous: `X`'s cert would
+    read as a 5-node majority view even though only 2 nodes actually witnessed it). Passing the
+    island's real membership is what makes `provisional_cert_demotion` return true for the minority
+    island (2 < ⌈(5+1)/2⌉=3) and false for the majority island (3 ≥ 3) — a faithful demonstration,
+    not a scripted result.
+- **Known issues / deferred:** None outstanding against BLUEPRINT's M0–M7 scope. `chaos/injector.py`
+  still implements 3 of BLUEPRINT §9's 5 named faults (see S7's DECISION note on `flap` and the
+  poison faults, which are proven elsewhere in the test suite and this same demo script).
+- **Next step:** M8 [STRETCH] — LLM strategist behind `--strategist=llm` (still a deliberate stub
+  per CLAUDE.md's anti-goal: no LLM in the core path), asciinema recording of both demos as a
+  fallback, optional thin web view consuming `events.jsonl`. None of these block the Definition of
+  Done checklist in CLAUDE.md, which is otherwise satisfiable end to end.
+
+---
+
 ## S7 — 2026-07-16 (M6, out of order after M7)
 
 - **Session / date:** S7 / 2026-07-16
