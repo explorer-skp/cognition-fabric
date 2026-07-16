@@ -15,6 +15,60 @@ memory between sessions: if it isn't written here, the next session doesn't know
 
 ---
 
+## S3 — 2026-07-16 (M3)
+
+- **Session / date:** S3 / 2026-07-16
+- **Milestone(s) completed:** M3 (Pawl + Jury + lifecycle: full §5 pipeline, §6.1 ordered checks,
+  §4 transition machine, shadow staging harness).
+- **Acceptance criterion result:** `52 passed in 0.11s` (32 prior + 20 new). `tests/test_dilemma_a.py`
+  proves all five acceptance claims: (a) fabricated −90% claim dies at `counterfactual replay`
+  (reproduces at ≈ −55%); (b) overfit capsule — test deterministically scans 80 seeds and
+  cherry-picks the 6 luckiest for a mediocre `sampled_fraction=0.1` iot rule (lucky median ≈ −69%,
+  population median ≈ +13%) — passes counterfactual, dies at `author-blind held-out`; (c)
+  true-but-unsafe subnet-quarantine capsule (genuine ≈ −55% measured gain) dies at
+  `invariant/conformance` naming `no_blanket_subnet_block_without_compliance_class`; (d) honest
+  capsule passes Pawl, 3/3 jury quorum, 10/10 shadow wins → ACTIVE with confidence 1.0 and a
+  quorum cert whose signatures verify; (e) every rejection asserts its stage's reason string.
+  `make demo-smoke` output byte-identical to M2 (no live-path changes).
+- **Files created/modified:**
+  - New: `fabric/pawl.py` (ordered §6.1 checks, `PawlContext`/`PawlResult`), `fabric/jury.py`
+    (`select_jury`, `sample_episode`, `replay`, stages 3–5, `vote_payload`, `validate_capsule`),
+    `fabric/lifecycle.py` (§4 transition guard, `submit`, `shadow_step`/`shadow_verdict`/
+    `run_shadow`, injected no-op emitter), `tests/test_dilemma_a.py`, `tests/test_m3_pipeline.py`.
+  - Modified: `fabric/config.py` (`REUSE_REFINE_MAX`, `HELDOUT_WIN`, `MIN_N_EPISODES`,
+    `RATE_WINDOW_S`, `RATE_PER_REPUTATION`, `CONTEXT_MAX_WIDTH_FRAC`, `CLASS_PARAM_SPACE`),
+    `fabric/registry.py` (`ACTION_DIMENSIONS`, `SCENARIO_DIMENSIONS`, `Protected` +
+    `PROTECTED_BOUNDS`, `context_priority_class`), `agents/strategist.py` (binding decision M3.1
+    only: prior merged over `DEFAULT_ACTION`, budget `1 + REUSE_REFINE_MAX`; cold path untouched).
+- **DECISION comments added:**
+  - `fabric/config.py` — `CONTEXT_MAX_WIDTH_FRAC=0.8` (full-width interval reads as wildcard);
+    `CLASS_PARAM_SPACE` mirrors taskgen's drift-clamped ranges, lives in config (scope lock
+    excludes `world/`).
+  - `fabric/registry.py` — only `inspection_depth` carries a static COMPLIANCE floor (=2, the
+    DEFAULT_ACTION baseline); `block_ttl_s` reversibility stays a dynamic invariant so unsafe
+    capsules reach stage 5; a context omitting `site_class` is COMPLIANCE-scoped (fail-secure).
+  - `fabric/jury.py` — '‖' in sortition = ':'-joined concatenation; non-positive baseline metric
+    scores an episode 0% (no division blow-up, no free pass); stage 5 checks the *declared* rule
+    (merged over `DEFAULT_ACTION`) against every episode context — refinement patching an unsafe
+    rule live does not save the capsule.
+  - `fabric/lifecycle.py` — store meta is LWW with a JSON tie-break (M2), so callers write at most
+    one lifecycle snapshot per sim tick (`submit` validates each logical transition but persists
+    only the outcome); shadow win/loss judged on `solve_cost` regardless of claim metric, tie =
+    loss; QUARANTINED reachable from CANDIDATE and ACTIVE.
+  - `agents/strategist.py` — partial prior rules merge over `DEFAULT_ACTION` for a complete,
+    deterministic start.
+- **Known issues / deferred:**
+  - `partition_view` is the sorted full agent set (binding decision M3.4); M6 fills it with real
+    connectivity views. Rate/reputation inputs (`PawlContext`) are caller-supplied; live tracking
+    arrives with the agent-loop wiring (M4) and slashing (M5).
+  - Shadow staging is harness-only (`run_shadow` over provided tasks); live agent-loop wiring,
+    capsule authoring, and REUSE events are M4. `agents/agent.py` untouched.
+  - Dev keyring keys are derivable — held-out blindness rests on the keyring interface, not the
+    dev keys (documented stub seam, §13).
+- **Next step:** M4 — gossip + fabric-query-before-solve reuse + ratchet metrics + twin-lane A/B.
+
+---
+
 ## S2 — 2026-07-16 (M2)
 
 - **Session / date:** S2 / 2026-07-16

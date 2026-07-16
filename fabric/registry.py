@@ -65,6 +65,60 @@ DIMENSIONS: dict[str, Dimension] = {
     )
 }
 
+# The action vocabulary: dimensions a capsule's payload.rule may set (BLUEPRINT §8). The Pawl's
+# ratchet check rejects any rule key outside this set — the control plane speaks registry-only
+# (binding decision M3.3a; this is what kills e.g. `allowlist_subnet` mechanically).
+ACTION_DIMENSIONS: frozenset[str] = frozenset(
+    (
+        "rate_limit_pps",
+        "inspection_depth",
+        "quarantine_scope",
+        "retry_backoff_ms",
+        "sampled_fraction",
+        "block_ttl_s",
+    )
+)
+
+# Scenario dimensions a capsule's context.dims may scope over (blast-radius bound, Pawl check 3).
+SCENARIO_DIMENSIONS: frozenset[str] = frozenset(("traffic_gbps", "device_count", "site_class"))
+
+
+@dataclass(frozen=True)
+class Protected:
+    """A protected-dimension annotation for the ratchet (binding decision M3.3): in contexts of
+    `priority_class`, the dimension's value may only tighten relative to `bound` — `floor` means
+    values below the bound loosen it (blocked), `ceiling` means values above do."""
+
+    priority_class: str  # "SAFETY" | "COMPLIANCE"
+    direction: str  # "floor" | "ceiling"
+    bound: float
+
+
+# The ratchet's protected bounds (BLUEPRINT §6.1 check 2). Mechanical, data-driven — the Pawl never
+# interprets intent, it compares numbers to this table.
+# DECISION: only `inspection_depth` carries a static COMPLIANCE floor (the §6.1 worked example);
+# `block_ttl_s` reversibility stays a *dynamic* invariant (`quarantine_reversible`, checked per
+# episode by the Jury/scenarios) rather than a static bound, so true-but-unsafe capsules are killed
+# at the invariant/conformance stage — the layered story Dilemma A demonstrates.
+# DECISION: floor 2 = DEFAULT_ACTION's inspection_depth — the safe baseline no capsule may loosen.
+PROTECTED_BOUNDS: dict[str, Protected] = {
+    "inspection_depth": Protected(priority_class="COMPLIANCE", direction="floor", bound=2.0),
+}
+
+
+def context_priority_class(context_dims: dict) -> str | None:
+    """The priority class a capsule context falls under, for the ratchet check.
+
+    # DECISION: a context is COMPLIANCE-class iff its effective site_class set includes the
+    # compliance-classed site ("dc"). A context that omits site_class applies to *all* sites,
+    # so COMPLIANCE applies — omission must never widen what a capsule may loosen (fail-secure).
+    """
+    sites = context_dims.get("site_class")
+    if sites is None or COMPLIANCE_SITE_CLASS in sites:
+        return "COMPLIANCE"
+    return None
+
+
 # --- Invariants / constitution (BLUEPRINT §8) --------------------------------
 # Hard predicates no capsule (and no live decision) may violate. These are the names quoted in
 # capsule.evidence.conformance_required and in Pawl reason strings — do not rename.

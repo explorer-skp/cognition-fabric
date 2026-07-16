@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from fabric.config import ACTION_SPACE, DEFAULT_ACTION, MAX_ATTEMPTS
+from fabric.config import ACTION_SPACE, DEFAULT_ACTION, MAX_ATTEMPTS, REUSE_REFINE_MAX
 from world.cost import solve_cost
 from world.scenarios import EpisodeMetrics, relevant_dims, simulate
 from world.taskgen import Task
@@ -50,11 +50,24 @@ class Strategist(Protocol):
 
 class HeuristicStrategist:
     """Deterministic coordinate-ascent hill-climb. Starts from a prior when given one (reuse), else
-    from the safe default action (cold discovery)."""
+    from the safe default action (cold discovery).
+
+    This is the *single solve path* (binding decision M3.1): jury counterfactual replay, shadow
+    staging, and live reuse all call it — "with capsule" is `solve(prior=rule)`, "without" is
+    `solve(prior=None)`, same seed — so a validated claim and live behavior can never diverge by
+    code path. With a prior, the search evaluates the prior first and then makes at most
+    REUSE_REFINE_MAX refinement attempts; cold search keeps the full MAX_ATTEMPTS budget.
+    """
 
     def solve(self, task: Task, prior: dict | None = None) -> SolveResult:
         dims = relevant_dims(task.incident_class)
         attempts = 0
+        # DECISION: a prior may be a *partial* rule (a capsule sets only the dims it learned about);
+        # merging over the safe DEFAULT_ACTION yields a complete, deterministic starting action.
+        if prior is None:
+            start, budget = dict(DEFAULT_ACTION), MAX_ATTEMPTS
+        else:
+            start, budget = {**DEFAULT_ACTION, **prior}, 1 + REUSE_REFINE_MAX
 
         def evaluate(action: dict) -> EpisodeMetrics:
             nonlocal attempts
@@ -63,17 +76,17 @@ class HeuristicStrategist:
             attempts += 1
             return simulate(task.params, action, seed)
 
-        best_action = dict(prior) if prior else dict(DEFAULT_ACTION)
+        best_action = start
         best_impact = _impact(evaluate(best_action))
 
         improved = True
-        while improved and attempts < MAX_ATTEMPTS:
+        while improved and attempts < budget:
             improved = False
             for dim in dims:
                 space = ACTION_SPACE[dim]
                 idx = _nearest_index(space, best_action[dim])
                 for nidx in (idx - 1, idx + 1):
-                    if 0 <= nidx < len(space) and attempts < MAX_ATTEMPTS:
+                    if 0 <= nidx < len(space) and attempts < budget:
                         candidate = dict(best_action)
                         candidate[dim] = space[nidx]
                         impact = _impact(evaluate(candidate))
