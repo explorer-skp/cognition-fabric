@@ -8,6 +8,3 @@ __pycache__/
 build/
 dist/
 recordings/
-CLAUDE.md
-.claude/
-CLAUDE.local.md

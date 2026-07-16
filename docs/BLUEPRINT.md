@@ -154,7 +154,7 @@ DRAFT ──submit──▶ SUBMITTED ──Pawl fail──▶ REJECTED(reason)
                      │ quorum cert (2 of 3)
                      ▼
                 CANDIDATE (shadow mode: evaluated, never applied)
-                     │ shadow_wins ≥ 7/10 and 0 invariant hits        │ shadow fail
+                     │ mesh-shadow quorum met (derived locally)       │ shadow fail
                      ▼                                                ▼
                   ACTIVE ──superseded_by──▶ SUPERSEDED           REJECTED
                      │
@@ -202,10 +202,14 @@ Pipeline (all in `fabric/jury.py` + `fabric/pawl.py`, pure functions, unit-teste
 6. **Quorum certificate** — each juror signs `{capsule_id, verdict, measured_delta, partition_view}`.
    2-of-3 ACCEPT → CANDIDATE. Certificates are stored in the capsule and replicated: the _proof of
    verification travels with the insight_.
-7. **Shadow staging** — as CANDIDATE, on the next 10 applicable live tasks, the executing agent forks
-   the seeded episode and runs both branches (this is a simulator; forking is free — say so). Capsule
-   must win ≥ 7/10 with zero invariant hits → ACTIVE, `confidence = wins/10`.
-   _Kills: passes-the-lab-fails-the-field cases, cheaply._
+7. **Mesh-wide shadow staging** — on quorum cert, the capsule push-gossips as CANDIDATE. Every node
+   that receives a matching live task forks the seeded episode, runs both branches (a simulator;
+   forking is free — say so), and appends a signed SHADOW_RECORD to its store; records replicate by
+   anti-entropy. Promotion is **derived, never announced**: a pure function flips a capsule ACTIVE
+   locally once the store holds ≥ SHADOW_QUORUM_N records from ≥ SHADOW_MIN_NODES distinct nodes with
+   wins ≥ SHADOW_QUORUM_WIN and zero invariant hits — monotone, so no flapping, and convergent with
+   the store. The jury samples the _declared_ context; shadow consumes the _live, drifting_ stream —
+   the lab, then the field. _Kills: passes-the-lab-fails-the-field cases, cheaply and mesh-fast._
 
 Hallucination taxonomy → which stage kills it (put this table in the defence slide):
 
@@ -224,7 +228,8 @@ the effect," not "what is the global order of transactions." Quorum-certified re
 a ledger gives the second at the cost of liveness under partition. (Full argument: DEFENCE.md Q1.)
 
 Thresholds live in `fabric/config.py` as named constants (`JURY_K=3`, `QUORUM=2`, `HELDOUT_N=8`,
-`MIN_EFFECT=0.15`, `CLAIM_TOL=0.25`, `SHADOW_N=10`, `SHADOW_WIN=7`) — judges will ask for them;
+`MIN_EFFECT=0.15`, `CLAIM_TOL=0.25`, `SHADOW_QUORUM_N=6`, `SHADOW_QUORUM_WIN=5`,
+`SHADOW_MIN_NODES=2`) — judges will ask for them;
 answer by opening one file.
 
 ---
@@ -257,8 +262,8 @@ at worst degrade optimality inside one context; it can never flip an invariant a
 
 ### 6.3 Staging (temporal)
 
-Shadow mode (§5.7) means even an admitted capsule spends its first 10 applications influencing
-nothing, while divergence is measured.
+Shadow mode (§5.7) means even an admitted capsule influences nothing until a mesh-wide quorum of
+signed shadow records exists — its first applications everywhere are measured, not trusted.
 
 ### 6.4 Post-hoc: Sentinel probes + bisect + Excision
 
