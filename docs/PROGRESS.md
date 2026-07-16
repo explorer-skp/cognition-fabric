@@ -15,6 +15,76 @@ memory between sessions: if it isn't written here, the next session doesn't know
 
 ---
 
+## S7 — 2026-07-16 (M6, out of order after M7)
+
+- **Session / date:** S7 / 2026-07-16
+- **Milestone(s) completed:** M6 (chaos injector + partition semantics, BLUEPRINT §6.2/§7.4-7.5).
+  Built after M7 on explicit instruction — S6's "M6 deliberately skipped" gap is now filled, except
+  that `demo/demo_chaos.py`'s narrated Act 3 still stops after Excision (mechanism is real and
+  tested; not yet dramatized in that script's narration/pacing — see Known issues).
+- **Acceptance criterion result:** `110 passed in 0.67s` (104 prior + 6 new,
+  `tests/test_dilemma_c.py`). `(a)` two islands `{site-a,site-b}` | `{site-c,site-d,site-e}` each
+  discover, jury-validate (real Pawl, real 3/3 quorum on honestly-measured claims), and mesh-promote
+  their own ddos_syn_flood capsule through real `shadow_step` shadow while a chaos-injected
+  partition blocks anti-entropy — both genuinely reach ACTIVE, each invisible on the other island.
+  `(b)` heal (`reconcile_within_partition(nodes, None)`) converges every node's store+ledger; for an
+  overlapping-context task every one of the 5 nodes independently calls the same pure `arbitrate()`
+  and picks the identical winner. `(c)` three repeated arbitrations of the same pair cross
+  `REFINE_THRESHOLD`; `refine_split` finds `traffic_gbps` as the separating dimension and produces
+  two non-overlapping sub-ranges; both refined capsules are re-authored and reach ACTIVE through the
+  genuine pipeline — both contexts survive. Plus units: `partitioned` gates cross-island only,
+  `crash_node` round-trips a store intact (M2's guarantee, reusable), `provisional_cert_demotion`'s
+  majority threshold. `make demo-smoke`, `demo-ratchet`, `demo-chaos` unaffected — all three still
+  byte-identical across two runs after this session's fabric edits.
+- **Files created/modified:**
+  - New: `chaos/__init__.py`, `chaos/injector.py` (`Partition`, `partitioned`,
+    `reconcile_within_partition`, `crash_node`), `tests/test_dilemma_c.py`.
+  - Modified: `fabric/config.py` (`REFINE_THRESHOLD=3`), `fabric/jury.py` (`juror_verdict`/
+    `validate_capsule` gain an optional `partition_view` param, default `None` = unchanged full-mesh
+    behavior), `fabric/lifecycle.py` (`submit` threads `partition_view` through;
+    `provisional_cert_demotion` + `demote_provisional`), `fabric/arbitration.py` (`refine_split`,
+    `OverlapTracker`/`record_overlap`), `pyproject.toml` (+`chaos` package), `demo/demo_chaos.py`
+    (Act 3's M6 note updated from "not implemented" to "implemented, not yet dramatized here"),
+    `README.md` (Consistency dilemma + milestones-built section updated to match).
+- **DECISION comments added:**
+  - `fabric/lifecycle.py` — provisional-cert demotion lands on QUARANTINED, **not** a new
+    ACTIVE→CANDIDATE transition edge. First attempt added that edge directly; caught immediately
+    because `tests/test_m3_pipeline.py::test_lifecycle_transition_guard` already asserts
+    ACTIVE→CANDIDATE is illegal, and CLAUDE.md forbids modifying an existing test. Reusing
+    QUARANTINED is not a second meaning bolted onto the state — a minority-island cert and a
+    poisoned ancestor are both "the evidence behind this promotion doesn't hold up," and M5's
+    `quarantined_at` watermark in `derive_state` (fabric/gossip.py) already refuses pre-watermark
+    records/certs, so the exact same re-promotion machinery applies with zero gossip.py changes.
+  - `fabric/jury.py`/`fabric/lifecycle.py` — `partition_view` is `None`-default everywhere it
+    threads through, so every M3–M5 caller is byte-identical; only a caller that explicitly passes a
+    real view (M6-aware code) changes behavior.
+  - `chaos/injector.py` — implements 3 of BLUEPRINT §9's 5 named faults (`partition`, `node_crash`;
+    `heal` is `partition=None`). `poison_blatant`/`poison_subtle` are already proven end-to-end in
+    `tests/test_dilemma_b.py` (M5) and `demo/demo_chaos.py` (M7); `flap` (repeatedly toggling
+    partition) is exercised by no acceptance criterion this session and was left out.
+  - `fabric/arbitration.py` — `refine_split` treats a capsule's declared `context.dims` as its
+    "stored evidence range" (BLUEPRINT §7.4's exact phrase) — no separate evidence-range field
+    exists or is needed. Picks the dim with least overlap fraction among dims shared by both
+    capsules; ties/zero-separation fall back to "winner takes the overlap, loser superseded"
+    (§7.4's stated fallback) by returning `loser_dims=None`.
+  - `tests/test_dilemma_c.py` — seeds derived via `hashlib.sha256`, never Python's builtin `hash()`
+    (PYTHONHASHSEED-salted, would silently break byte-identical output) — same rule already learned
+    the hard way in S6's `demo_chaos.py`, applied proactively here from the first draft.
+- **Known issues / deferred:**
+  - `demo/demo_chaos.py`'s narrated Act 3 still stops after Excision — M6's mechanism is real and
+    tested (`tests/test_dilemma_c.py`) but wiring a partition/heal/Refine beat into that script's
+    live narration/pacing (RUNBOOK 8:45–10:15) is separate work, not done this session.
+  - `docs/DEMO_RUNBOOK.md` itself was not edited (as before, `demo_chaos.py` narrates the gap
+    inline). A future session wiring M6 into the demo should update both together.
+  - `flap` (BLUEPRINT §9's fifth chaos fault, a partition that toggles repeatedly) has no dedicated
+    function in `chaos/injector.py` — trivially composable from `reconcile_within_partition` +
+    alternating `Partition`/`None`, but not built or tested.
+- **Next step:** Wire M6 into `demo/demo_chaos.py`'s Act 3 (partition split, heal, Refine, minority-
+  cert demotion beats) and update `docs/DEMO_RUNBOOK.md` to match, closing the one remaining gap
+  between the codebase and the full scripted RUNBOOK. Otherwise M0–M7 are all complete.
+
+---
+
 ## S6 — 2026-07-16 (M7 — M6 deliberately skipped)
 
 - **Session / date:** S6 / 2026-07-16

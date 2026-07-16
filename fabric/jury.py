@@ -265,12 +265,14 @@ def vote_payload(capsule_id: str, verdict: str, measured_delta: float, partition
 
 
 def juror_verdict(
-    capsule: Capsule, juror_id: str, agent_ids: list[str], strategist: Strategist
+    capsule: Capsule, juror_id: str, agent_ids: list[str], strategist: Strategist,
+    partition_view: str | None = None,
 ) -> JurorVerdict:
     """One juror's full pass over stages 3–5. `measured_delta` is the juror's held-out median (its
-    own independent measurement); `partition_view` is the sorted full agent set for now — M6 fills
-    it with the juror's actual connectivity view (binding decision M3.4)."""
-    partition_view = "|".join(sorted(agent_ids))
+    own independent measurement). `partition_view` is the juror's actual connectivity view (binding
+    decision M3.4, filled in at M6): the sorted `|`-joined reachable-agent set at cert time. Defaults
+    to the sorted full agent set when the caller has no partition (unchanged M3-M5 behavior)."""
+    partition_view = partition_view if partition_view is not None else "|".join(sorted(agent_ids))
     measured_delta = 0.0
     ok, reason, cf_episodes = counterfactual_replay(capsule, strategist)
     episodes = cf_episodes
@@ -311,14 +313,20 @@ def validate_capsule(
     agent_ids: list[str],
     strategist: Strategist | None = None,
     sim_time: float = 0.0,
+    partition_view: str | None = None,
 ) -> JuryOutcome:
-    """The full jury pass: sortition, per-juror stages 3–5, quorum certificate (§5.2–§5.6)."""
+    """The full jury pass: sortition, per-juror stages 3–5, quorum certificate (§5.2–§5.6).
+
+    `partition_view` (BLUEPRINT §7.5, milestone M6): the reachable-agent view at cert time, if the
+    jury is convening during a partition — carried into every juror's vote and the cert. `None`
+    (the default) means no partition — the full mesh, unchanged M3-M5 behavior.
+    """
     try:
         strategist = strategist or HeuristicStrategist()
         jurors = select_jury(
             agent_ids, capsule.capsule_id, capsule.provenance.author_epoch, capsule.provenance.author
         )
-        verdicts = [juror_verdict(capsule, j, agent_ids, strategist) for j in jurors]
+        verdicts = [juror_verdict(capsule, j, agent_ids, strategist, partition_view) for j in jurors]
         accepts = sum(1 for v in verdicts if v.verdict == "ACCEPT")
         if accepts >= QUORUM:
             cert = {

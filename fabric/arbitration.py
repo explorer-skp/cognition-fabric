@@ -8,15 +8,22 @@ no split-brain behavior even while stores momentarily diverge.
 
 `applies` and `arbitrate` are pure and author-independent (CLAUDE.md); `active_matches` reads a
 node's local `(store, ledger)` and derives ACTIVE via `gossip.derive_state` (promotion is derived,
-never stored — decision M4.2). No Refine here: persistent-overlap sharpening is M6.
+never stored — decision M4.2).
+
+`refine_split` + `OverlapTracker` (milestone M6, BLUEPRINT §7.4): a persistent overlap — the same
+two capsules arbitrated between on `REFINE_THRESHOLD` tasks — is treated as an underspecified
+context, not a conflict to resolve by deletion. `refine_split` is pure (declared contexts in,
+narrowed contexts out); `OverlapTracker` is the immutable-update counter that decides *when* to call
+it, the same pattern as `fabric.lifecycle.ShadowTracker`.
 """
 
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from fabric.capsule import Capsule, LifecycleState
+from fabric.config import REFINE_THRESHOLD
 from fabric.gossip import ShadowLedger, derive_state
 from fabric.registry import context_priority_class
 from fabric.store import Store
@@ -98,3 +105,99 @@ def active_matches(
         if derived.state == LifecycleState.ACTIVE:
             matches.append(Applicable(capsule=capsule, confidence=derived.confidence))
     return matches
+
+
+# --- Refine: persistent overlap is an underspecified context (BLUEPRINT §7.4, milestone M6) -----
+
+@dataclass(frozen=True)
+class OverlapTracker:
+    """Counts how many times the same pair of capsules has been arbitrated between, keyed by
+    `(winner_id, loser_id)` — the "same overlap arbitrates repeatedly (≥ REFINE_THRESHOLD tasks)"
+    trigger. Immutable-update, mirroring `fabric.lifecycle.ShadowTracker`'s pattern: `record_overlap`
+    returns a *new* tracker rather than mutating in place."""
+
+    counts: dict[tuple[str, str], int] = field(default_factory=dict)
+
+
+def record_overlap(
+    tracker: OverlapTracker, winner: Applicable, loser: Applicable
+) -> tuple[OverlapTracker, bool]:
+    """Record one arbitration between `winner` and `loser`. Returns `(updated_tracker,
+    should_refine)` — `should_refine` is True the tick the pair's count reaches REFINE_THRESHOLD
+    (the caller's cue to call `refine_split`), then stays False on further calls for the same pair
+    unless the caller resets the tracker after acting on it (no re-triggering on a stale count)."""
+    key = (winner.capsule.capsule_id, loser.capsule.capsule_id)
+    counts = dict(tracker.counts)
+    counts[key] = counts.get(key, 0) + 1
+    return OverlapTracker(counts=counts), counts[key] == REFINE_THRESHOLD
+
+
+@dataclass(frozen=True)
+class RefineResult:
+    """The outcome of resolving a persistent overlap: either a split along the declared dimension
+    where the two capsules' contexts separate most (BLUEPRINT §7.4 — "pick the dim with disjoint or
+    least-overlapping ranges"), or, if no declared dimension separates them at all, the winner takes
+    the whole overlap and the loser is wholly superseded."""
+
+    dimension: str | None
+    winner_dims: dict
+    loser_dims: dict | None
+    reason: str
+
+
+def _numeric_interval(dims: dict, name: str) -> tuple[float, float] | None:
+    value = dims.get(name)
+    if isinstance(value, (list, tuple)) and len(value) == 2 and all(
+        isinstance(x, (int, float)) for x in value
+    ):
+        return float(value[0]), float(value[1])
+    return None
+
+
+def refine_split(winner: Applicable, loser: Applicable) -> RefineResult:
+    """Resolve a persistent overlap between two ACTIVE capsules for the same class (BLUEPRINT §7.4,
+    milestone M6). Pure: `winner`/`loser` are the caller's own prior `arbitrate()` result — this
+    function never re-arbitrates, it only decides how to sharpen the map.
+
+    Picks the numeric dimension shared by both declared contexts where the two intervals overlap
+    the *least* (their "seed-episode parameter ranges" — the declared `context.dims` — are exactly
+    the stored evidence range per capsule), and splits both capsules' interval on that dimension at
+    the overlap's midpoint: the capsule whose original interval is centered lower keeps the lower
+    sub-range. If every shared numeric dimension is identical (zero separation anywhere), nothing
+    distinguishes the two contexts — the winner takes the whole overlap, the loser is superseded.
+    """
+    winner_dims, loser_dims = winner.capsule.context.dims, loser.capsule.context.dims
+    shared = sorted(set(winner_dims) & set(loser_dims))
+    best_dim: str | None = None
+    best_overlap_frac = 1.0
+    for name in shared:
+        w_iv, l_iv = _numeric_interval(winner_dims, name), _numeric_interval(loser_dims, name)
+        if w_iv is None or l_iv is None:
+            continue
+        overlap = max(0.0, min(w_iv[1], l_iv[1]) - max(w_iv[0], l_iv[0]))
+        union = max(w_iv[1], l_iv[1]) - min(w_iv[0], l_iv[0])
+        frac = overlap / union if union > 0 else 1.0
+        if frac < best_overlap_frac:
+            best_dim, best_overlap_frac = name, frac
+
+    if best_dim is None or best_overlap_frac >= 1.0:
+        return RefineResult(
+            dimension=None, winner_dims=dict(winner_dims), loser_dims=None,
+            reason="no declared dimension separates the two capsules — winner takes the whole "
+                   "overlap, loser is superseded",
+        )
+
+    w_iv, l_iv = _numeric_interval(winner_dims, best_dim), _numeric_interval(loser_dims, best_dim)
+    split_point = round((max(w_iv[0], l_iv[0]) + min(w_iv[1], l_iv[1])) / 2.0, 4)
+    w_center, l_center = (w_iv[0] + w_iv[1]) / 2.0, (l_iv[0] + l_iv[1]) / 2.0
+    new_winner_dims, new_loser_dims = dict(winner_dims), dict(loser_dims)
+    if w_center <= l_center:
+        new_winner_dims[best_dim] = [w_iv[0], split_point]
+        new_loser_dims[best_dim] = [split_point, l_iv[1]]
+    else:
+        new_winner_dims[best_dim] = [split_point, w_iv[1]]
+        new_loser_dims[best_dim] = [l_iv[0], split_point]
+    return RefineResult(
+        dimension=best_dim, winner_dims=new_winner_dims, loser_dims=new_loser_dims,
+        reason=f"split along {best_dim!r} at {split_point} — prior overlap fraction {best_overlap_frac:.2f}",
+    )

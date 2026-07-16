@@ -39,21 +39,26 @@ for a human audience, and `--theme=high-contrast` for a washed-out projector.
   one probe period; bisect finds the exact culprit; Excision tombstones it and quarantines its
   derived descendants — the capsule count drops by exactly the poisoned subtree, never to zero.
   Collective memory is retained, not reset.
-- **Consistency** (BLUEPRINT §7) — storage is eventually consistent (CRDT gossip merge, milestone
-  M4); decisions are deterministic (`arbitrate()`, milestone M4). The third leg — meaning is
-  scoped, via partition-driven Refine — is milestone M6, which this build does not implement (see
-  "Known gaps" below); `tests/test_dilemma_c.py` does not exist yet.
+- **Consistency** (`tests/test_dilemma_c.py`) — storage is eventually consistent (CRDT gossip
+  merge, milestone M4); decisions are deterministic (`arbitrate()`, milestone M4); meaning is
+  scoped (milestone M6). A network partition lets two islands each discover and mesh-promote their
+  own genuinely-good capsule for the same class through the real pipeline; heal reconciles every
+  node via the ordinary CRDT merge and every node resolves the resulting overlap identically; once
+  the same overlap arbitrates repeatedly, Refine sharpens both capsules' declared contexts along
+  the dimension where their evidence separates most — both contexts survive, re-promoted through
+  the genuine pipeline, not deleted.
 
 ## Milestones built this session
 
-M0–M5 and M7 (`docs/PROGRESS.md` has the full per-session log). **M6 was deliberately skipped** —
-BLUEPRINT's build order is strictly M0→M7, and this session jumped from M5 to M7 on explicit
-instruction rather than build the chaos injector + partition semantics. Concretely, that means:
-
-- No `chaos/injector.py`, no partition/heal/Refine, no minority-cert demotion.
-- `demo-chaos`'s Act 3 stops after Excision and prints an explicit note at the point where
-  partition/heal would run, rather than faking the beat.
-- `docs/DEMO_RUNBOOK.md`'s Act 3 partition/heal beats (8:45–10:15) are not reproduced live.
+M0–M7 (`docs/PROGRESS.md` has the full per-session log). Build order deviated from BLUEPRINT's
+strict M0→M7 — M7 (TUI + demo scripts) was built before M6 (chaos injector + partition semantics)
+on explicit instruction, then M6 followed in a later session. One gap remains from that ordering:
+`demo-chaos`'s narrated Act 3 stops after Excision and does not (yet) dramatize partition/heal/
+Refine live — `chaos/injector.py`, `fabric.arbitration.refine_split`, and
+`fabric.lifecycle.demote_provisional` are implemented and proven in `tests/test_dilemma_c.py`, just
+not wired into that demo script's narration/pacing. `docs/DEMO_RUNBOOK.md`'s Act 3 partition/heal
+beats (8:45–10:15) are therefore not reproduced by `make demo-chaos`, though the mechanism itself is
+real and tested.
 
 Everything else in the RUNBOOK — the amnesia problem, the first ratchet click, crash/reload with
 memory (a *live* re-proof of milestone M2's persistence guarantee inside a running mesh), the
@@ -64,7 +69,7 @@ runs.
 
 - `docs/BLUEPRINT.md` — architecture, schemas, algorithms, thresholds, vocabulary (source of truth).
 - `docs/DEFENCE.md` — why each design choice exists; the Q&A bank for judges.
-- `docs/DEMO_RUNBOOK.md` — the scripted 10–15 minute live demo this code delivers (modulo the M6
+- `docs/DEMO_RUNBOOK.md` — the scripted 10–15 minute live demo this code delivers (modulo the Act 3
   gap above).
 - `docs/PROGRESS.md` — the session-by-session build log; the only memory between sessions.
 - `CLAUDE.md` — the engineering constitution this codebase was built under (determinism rules,

@@ -7,9 +7,11 @@ Sentinel probe catches its off-claim KPI regression within one probe period; bis
 culprit; Excision tombstones it and quarantines its one organic descendant — twelve capsules to ten,
 never to zero.
 
-Honest scoping (this build): partition/heal/Refine and minority-cert demotion are BLUEPRINT §6.2's
-M6 milestone (chaos injector + partition semantics), which this session did not implement — see
-docs/PROGRESS.md. The script says so explicitly at that beat instead of faking it.
+Honest scoping (this build): partition/heal/Refine and provisional-cert demotion (BLUEPRINT §6.2,
+§7.4-7.5, milestone M6) are implemented and proven in `tests/test_dilemma_c.py`
+(`chaos/injector.py`, `fabric.arbitration.refine_split`, `fabric.lifecycle.demote_provisional`) but
+are not yet dramatized in this narrated Act 3 — the script says so explicitly at that beat instead
+of silently omitting it.
 
 Default output is plain, deterministic text (same discipline as `demo_smoke.py`/`demo_ratchet.py`).
 `--tui` drives `ui.tui.Dashboard` live; `--pace=live` inserts RUNBOOK narration beats.
@@ -302,9 +304,12 @@ def main(argv: list[str] | None = None) -> None:
         print("\n## Partition + heal (BLUEPRINT §6.2, milestone M6)")
         narrate(
             28.0,
-            "Not implemented in this build: M6 (chaos injector + partition/heal + Refine + "
-            "minority-cert demotion) was deliberately skipped this session — see docs/PROGRESS.md. "
-            "Everything above this line (poison, Sentinel, bisect, Excision) is real.",
+            "M6 (chaos injector + partition/heal + Refine + provisional-cert demotion) is now "
+            "built and proven in tests/test_dilemma_c.py — chaos/injector.py, "
+            "fabric.arbitration.refine_split, fabric.lifecycle.demote_provisional — but not yet "
+            "dramatized in this narrated Act 3; see docs/PROGRESS.md. Everything above this line "
+            "(poison, Sentinel, bisect, Excision) is real, and so is everything M6 proves in its "
+            "own test suite.",
         )
         _beat(args.pace, "Act 3 complete")
     finally:

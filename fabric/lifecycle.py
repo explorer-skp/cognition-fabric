@@ -105,6 +105,52 @@ def _write_state(
     return lifecycle
 
 
+# --- Partition semantics: provisional-cert demotion on heal (BLUEPRINT §7.5, milestone M6) -------
+
+def provisional_cert_demotion(quorum_cert: dict | None, mesh_size: int) -> bool:
+    """True iff a cert was formed with too small a `partition_view` to be trusted mesh-wide (§7.5):
+    `|partition_view| < ceil((N+1)/2)`, i.e. the jury did not see a majority of the mesh. A cert
+    with no `partition_view` (or no cert at all) never demotes — that is the pre-M6, full-mesh case.
+    Pure: reads the cert dict, no I/O."""
+    if not quorum_cert:
+        return False
+    view = quorum_cert.get("partition_view") or ""
+    seen = len([a for a in view.split("|") if a])
+    majority = -(-(mesh_size + 1) // 2)  # ceil((N+1)/2) via integer ceiling division
+    return seen < majority
+
+
+def demote_provisional(store: Store, capsule: Capsule, sim_time: float, *, emit: Emitter = _noop_emit) -> dict:
+    """Demote an ACTIVE capsule formed on a minority-island cert (§7.5): its knowledge is preserved
+    (still in the store, still gossiped) but no longer authoritative until it re-earns promotion on
+    fresh, mesh-wide evidence.
+
+    # DECISION: lands on QUARANTINED, not a new ACTIVE→CANDIDATE edge — `tests/test_m3_pipeline.py`
+    # already locks ACTIVE→CANDIDATE as illegal (CLAUDE.md: never modify an existing test), and
+    # QUARANTINED already means exactly this ("not currently trusted, must re-earn it") for
+    # Excision's descendants (M5). Reusing it here is not a second meaning bolted on — a minority-
+    # island cert and a poisoned ancestor are both "the evidence behind this promotion doesn't hold
+    # up," and `derive_state`'s `quarantined_at` watermark (fabric/gossip.py, M5) already refuses to
+    # count pre-watermark shadow records or a pre-watermark cert, so the exact same re-promotion
+    # machinery — fresh cert + fresh mesh-wide records — applies with no gossip.py change needed.
+    """
+    lifecycle = store.lifecycle_of(capsule.capsule_id)
+    if lifecycle is None:
+        raise ValueError(f"capsule {capsule.capsule_id[:12]} not in store — add before transitioning")
+    check_transition(LifecycleState(lifecycle["state"]), LifecycleState.QUARANTINED)
+    lifecycle["state"] = LifecycleState.QUARANTINED.value
+    lifecycle["quarantined_at"] = round(float(sim_time), 4)
+    store.set_meta(capsule.capsule_id, lifecycle, sim_time)
+    emit(
+        "HEAL",
+        sim_time,
+        capsule_id=capsule.capsule_id,
+        reason="provisional-cert demotion: partition_view below mesh majority at cert time — "
+               "quarantined pending re-jury and fresh mesh-wide evidence on heal",
+    )
+    return lifecycle
+
+
 # --- Submission pipeline: SUBMITTED → Pawl → Jury → CANDIDATE (§5.1–§5.6) --------
 
 def submit(
@@ -118,12 +164,16 @@ def submit(
     emit: Emitter = _noop_emit,
     ledger: "ShadowLedger | None" = None,
     node_ids: set[str] | None = None,
+    partition_view: str | None = None,
 ) -> tuple[LifecycleState, str]:
     """Run one capsule through admission. Returns the resulting state and the pipeline's one-line
     reason (the same string the PAWL_BLOCK / JURY_VERDICT event carries).
 
     Every logical §4 transition is validated (DRAFT → SUBMITTED → Pawl → JURY → …), but only the
-    pipeline's *outcome* is persisted — one meta snapshot per sim tick (see `_write_state`)."""
+    pipeline's *outcome* is persisted — one meta snapshot per sim tick (see `_write_state`).
+
+    `partition_view` (milestone M6): the reachable-agent view if the jury convenes during a
+    partition; `None` means the full mesh (unchanged M3-M5 behavior) — see `validate_capsule`."""
     if pawl_ctx is None:
         # DECISION (M5.4 wiring): with no caller-supplied Pawl context, derive the author's
         # reputation as the pure fold over this node's replicated history (fabric/excision.py) —
@@ -164,7 +214,9 @@ def submit(
 
     check_transition(state, LifecycleState.JURY)
     state = LifecycleState.JURY
-    outcome = validate_capsule(capsule, agent_ids, strategist=strategist, sim_time=sim_time)
+    outcome = validate_capsule(
+        capsule, agent_ids, strategist=strategist, sim_time=sim_time, partition_view=partition_view
+    )
     emit(
         "JURY_VERDICT",
         sim_time,

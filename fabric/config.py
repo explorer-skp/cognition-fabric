@@ -165,3 +165,8 @@ PROBE_TOL = DRIFT_THRESHOLD
 #       − REP_JUROR_SLASH·(ACCEPT votes signed in certs of revoked capsules), floored at 0.
 # Below REP_ISOLATION_FLOOR the existing Pawl check 5 auto-rejects the author's submissions.
 REP_PROMOTION_CREDIT = 0.05
+
+# --- Consistency: Refine + partition semantics (BLUEPRINT §7.4-7.5; milestone M6) --------------
+# A persistent overlap (the same two capsules arbitrated between on ≥ REFINE_THRESHOLD tasks) is
+# treated as an underspecified context and triggers Refine — a predicate split, not a deletion.
+REFINE_THRESHOLD = 3
