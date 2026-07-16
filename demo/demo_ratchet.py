@@ -154,17 +154,19 @@ def main(argv: list[str] | None = None) -> None:
     if dashboard is not None:
         dashboard.__enter__()
 
-    def narrate(sim_time: float, records: list[dict], text: str) -> None:
+    def narrate(sim_time: float, records: list[dict], text: str, *,
+                economics: dict | None = None) -> None:
         """Print one narrated beat and, in --tui mode, update the live dashboard to match — the
         single place both the terminal narrative and the Live UI advance, so they always agree on
         story order (BLUEPRINT §11 says everything shown is derived from the event stream; this is
-        that discipline applied to the narration too)."""
+        that discipline applied to the narration too). `economics` is the Lane A/B summary once
+        both lanes exist (Act 0 has no Lane A yet — the panel stays blank until Act 1)."""
         print(f"[{sim_time:>7.2f}] {text}")
         if dashboard is not None:
             state = DashboardState(
                 sim_time=sim_time, mesh=build_mesh_rows(records), fabric=build_fabric_rows(records),
-                staircase=ratchet_staircase(records), event_log=tuple(records[-12:]),
-                theme=args.theme, narration=text,
+                staircase=ratchet_staircase(records), economics=economics or {},
+                event_log=tuple(records[-12:]), theme=args.theme, narration=text,
             )
             dashboard.update(state)
         if args.pace == "live":
@@ -194,6 +196,9 @@ def main(argv: list[str] | None = None) -> None:
         lane_a = EventStream()
         reps = run_ratchet_lane_a(tasks, lane_a, crash_at=crash_at)
         lane_a_records = lane_a.records()
+        # Both lanes exist now, so the Economics panel can go live for the rest of the run — Act 0
+        # left it blank (Lane A hadn't run yet, nothing to compare).
+        economics = summarize(lane_a_records, lane_b_records)
 
         first_author = next((r for r in lane_a_records if r["type"] == "AUTHOR"), None)
         if first_author:
@@ -202,6 +207,7 @@ def main(argv: list[str] | None = None) -> None:
                 f"AUTHOR: {first_author['agent']} submits a capsule for "
                 f"{first_author['incident_class']} (claimed {first_author['delta_pct']:+.1f}%) — "
                 "an insight is not a message, it's a claim with seeds to replay it.",
+                economics=economics,
             )
         first_jury = next((r for r in lane_a_records if r["type"] == "JURY_VERDICT"), None)
         if first_jury:
@@ -209,6 +215,7 @@ def main(argv: list[str] | None = None) -> None:
                 first_jury["sim_time"], lane_a_records,
                 f"JURY_VERDICT: {first_jury['verdict']} — jurors {first_jury['jurors']}, chosen by "
                 "the capsule's own hash; no one, including the author, could pick the committee.",
+                economics=economics,
             )
         first_promoted = next((r for r in lane_a_records if r["type"] == "PROMOTED"), None)
         if first_promoted:
@@ -217,6 +224,7 @@ def main(argv: list[str] | None = None) -> None:
                 f"PROMOTED: capsule {first_promoted['capsule_id'][:10]} reaches ACTIVE "
                 f"(confidence {first_promoted.get('confidence', 0.0):.2f}) — push-gossip fans it out; "
                 "that latency is the Accelerator.",
+                economics=economics,
             )
         reuses = [r for r in lane_a_records if r["type"] == "REUSE"]
         non_author_reuses = [r for r in reuses if r["agent"] != (first_author or {}).get("agent")]
@@ -227,6 +235,7 @@ def main(argv: list[str] | None = None) -> None:
                 f"REUSE: {r['agent']} solves {r['incident_class']} at cost {r['solve_cost']:.1f} "
                 "using a capsule it never authored — same class, other site, cheap. Ratchet staircase "
                 "steps down and stays down.",
+                economics=economics,
             )
         crash_evt = next((r for r in lane_a_records if r["type"] == "CRASH"), None)
         restart_evt = next((r for r in lane_a_records if r["type"] == "RESTART"), None)
@@ -246,6 +255,7 @@ def main(argv: list[str] | None = None) -> None:
                     "ledger re-syncs."
                 )
                 + " Same crash as Act 0. Different outcome. That delta is the Fabric.",
+                economics=economics,
             )
         _beat(args.pace, "Act 1 complete")
 
@@ -257,6 +267,7 @@ def main(argv: list[str] | None = None) -> None:
                     lane_a_records[-1]["sim_time"], lane_a_records,
                     f"{cls}: staircase {stairs[cls][0]:.1f} → {stairs[cls][-1]:.1f} "
                     f"over {len(stairs[cls])} realized solves.",
+                    economics=economics,
                 )
         _beat(args.pace, "Act 2 complete")
     finally:
@@ -264,7 +275,7 @@ def main(argv: list[str] | None = None) -> None:
             dashboard.__exit__(None, None, None)
 
     # -- headline numbers card (BLUEPRINT §11) --
-    summary = summarize(lane_a_records, lane_b_records)
+    summary = economics
     rvd = summary["reuse_vs_discovery"]["overall"]
     print("\n# Card — expected numbers (BLUEPRINT §11 target: first-solve 25-35, reuse 4-8, "
           "lead 3-6 sim-s, Lane A 40-50% below Lane B)")
