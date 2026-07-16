@@ -92,6 +92,30 @@ SHADOW_WIN = 7
 # decision M3.1 — the single solve path shared by jury replay, shadow staging, and live reuse).
 REUSE_REFINE_MAX = 2
 
+# --- Authoring (BLUEPRINT §2 Accelerator; binding decision M4.1) --------------
+# After a discovery solve of a class, an agent authors a capsule only once it holds this many
+# recorded episodes of that class and its self-replay median improvement clears AUTHOR_MIN_EFFECT
+# (stricter than the jury's MIN_EFFECT=0.15 — borderline capsules must not churn the pipeline).
+AUTHOR_MIN_EPISODES = 4
+AUTHOR_MIN_EFFECT = 0.20
+
+# --- Gossip / anti-entropy (BLUEPRINT §7.1, §12; binding decision M4.2) -------
+# Period between anti-entropy digest rounds. On a digest mismatch, nodes exchange id sets and pull
+# missing records (GOSSIP_DIGEST → GOSSIP_PULL); promotion push (GOSSIP_PUSH) is eager, on quorum.
+GOSSIP_PERIOD = 2.0
+
+# --- Mesh-wide shadow staging (binding decision M4.2, amended) ----------------
+# Promotion is DERIVED from replicated, signed SHADOW_RECORDs, never announced: a capsule flips
+# ACTIVE once its local store holds ≥ SHADOW_QUORUM_N verified records from ≥ SHADOW_MIN_NODES
+# distinct nodes with wins ≥ SHADOW_QUORUM_WIN and zero invariant hits. The condition is monotone
+# (records only accumulate) so there is no flapping, and nodes converge as records replicate.
+# DECISION: distinct names from the legacy single-node SHADOW_N=10/SHADOW_WIN=7 (M3's run_shadow
+# harness, still exercised by tests/test_m3_pipeline.py) — the mesh model supersedes it on the live
+# path. M7 owns final tuning against demo pacing.
+SHADOW_QUORUM_N = 6
+SHADOW_QUORUM_WIN = 5
+SHADOW_MIN_NODES = 2
+
 # --- Pawl static checks (BLUEPRINT §6.1) --------------------------------------
 MIN_N_EPISODES = 4                  # check 4: falsifiable claim needs n_episodes ≥ 4
 RATE_WINDOW_S = 100.0               # check 5: submission window in sim-seconds

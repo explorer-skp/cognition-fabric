@@ -15,6 +15,75 @@ memory between sessions: if it isn't written here, the next session doesn't know
 
 ---
 
+## S4 — 2026-07-16 (M4)
+
+- **Session / date:** S4 / 2026-07-16
+- **Milestone(s) completed:** M4 (Gossip + reuse + ratchet metrics + twin-lane A/B). Mesh-wide shadow
+  staging (binding decision M4.2, **amended in-session** to records-based derived promotion),
+  fabric-query-before-solve reuse, organic derived capsules, and the pure metrics reducer.
+  **PS requirements 1–5 are now all demonstrable** (changing conditions → TaskGen drift; validated
+  reuse → Pawl/Jury/derived-shadow; drift/poison border → Pawl carried forward; consistency →
+  deterministic `arbitrate()` + CRDT gossip convergence; and the ratchet — the measured Lane A vs
+  Lane B economics).
+- **Acceptance criterion result:** `73 passed in 0.54s` (52 prior + 21 new). New:
+  `tests/test_m4_gossip_reuse.py` (applies/arbitrate incl. the **hash tie-break** and priority
+  dominance; `verify_push` accepts a valid cert and rejects a tampered juror sig / unknown author;
+  `derive_state` promotes at mesh quorum and is **unreachable from a single node's records alone**,
+  needs a win-supermajority + zero invariant hits, ignores foreign-node records; **gossip
+  convergence** property — two divergent `(store, ledger)` states reconcile to identical digests,
+  order-independently; a **derived capsule carries `derived_from`**), and `tests/test_m4_ratchet.py`
+  (repeat incidents reuse at **≥3 non-author sites** at **reuse ≤ 0.5× discovery**; staircase
+  **monotone non-increasing and steps down**; **Lane A < Lane B** on both the shaped and the natural
+  stream; **Lane B ≡ the fabric-off baseline** byte-for-byte; determinism; insight lead times).
+  `make demo-smoke` (M4 twin-lane block, byte-identical across runs):
+  ```
+  # demo-smoke (M4): twin-lane repeat-incident storm, seed=424242, tasks=60 (Lane A fabric ON · Lane B fabric OFF)
+  cert_expiry_storm    discovery_median=  18.67  reuse_median=    -    ratio=   -   staircase=18.7→18.6
+  ddos_syn_flood       discovery_median=  21.06  reuse_median=   9.06  ratio= 0.43  staircase=21.1→8.9
+  # ratchet: authored=5  promoted(mesh)=15  non-author reuse sites=4  median insight lead=12.0 sim-s
+  # economics: Lane A cumulative=859.6  Lane B cumulative=1243.6  saved=30.9%  (…absolute band tuned in M7)
+  ```
+- **Files created/modified:**
+  - New: `fabric/gossip.py` (ShadowRecord/ShadowLedger, sign/verify, build/verify/apply_push,
+    `derive_state`, `digest`, `reconcile`), `fabric/arbitration.py` (`applies`, `Applicable`,
+    `active_matches`, `arbitrate`), `ui/metrics.py` (pure reducer), `tests/test_m4_gossip_reuse.py`,
+    `tests/test_m4_ratchet.py`.
+  - Modified: `fabric/config.py` (`AUTHOR_MIN_EPISODES`, `AUTHOR_MIN_EFFECT`, `GOSSIP_PERIOD`,
+    `SHADOW_QUORUM_N/WIN`, `SHADOW_MIN_NODES`), `agents/agent.py` (`FabricAgent`, `run_fabric_storm`,
+    `run_twin_lane`; `run_baseline_storm` gained an optional injected `tasks` — default unchanged, so
+    Lane B stays byte-identical to M1), `demo/demo_smoke.py` (twin-lane metrics block in `main()`;
+    `run_smoke`/`_format` untouched for the determinism test).
+- **DECISION comments added:**
+  - `fabric/config.py` — mesh-shadow constants named `SHADOW_QUORUM_N=6 / SHADOW_QUORUM_WIN=5 /
+    SHADOW_MIN_NODES=2`, **distinct** from the legacy single-node `SHADOW_N=10 / SHADOW_WIN=7`
+    (still pinned by `tests/test_m3_pipeline.py`; the mesh model supersedes it on the live path).
+  - `fabric/gossip.py` — the `SHADOW_RECORD` OR-set lives here, not in `store.py` (M4 scope lock
+    excludes store.py), reconciled by the same anti-entropy pass; ACTIVE is derived, never stored or
+    gossiped; transport is the in-process orchestrator (§13, simulated network / real algorithms).
+  - `fabric/arbitration.py` — priority class compared lexicographically (§7); hash tie-break = the
+    smaller `sha256(capsule_id)` wins.
+  - `agents/agent.py` — Lane A is a sequential in-process orchestrator (gossip by direct verified
+    calls, transport simulated); shaped-supply is a *test/demo* concern only; declared context =
+    per-dim [min,max] over the recent evidence window (never wildcard); the derived-authoring
+    trigger compares episode **impact** (search effort excluded — a derived capsule captures a better
+    *rule*, not a cheaper search); one base-authoring attempt per class per node (no churn).
+  - Decision M4.4 (lane seed isolation) is a **no-op**: `world/taskgen.generate` already derives each
+    task's fields from `(run_seed, task_index)` only, independent of `n`/lane/fabric — verified, so
+    `world/taskgen.py` was not touched.
+- **Known issues / deferred:**
+  - Economics band (insight lead ≈ 12 sim-s vs §11's 3–6; Lane A/B gap) is not yet tuned — deferred
+    to M7 per plan/amendment; the *mechanism* is what M4 proves.
+  - Live periodic anti-entropy is a full all-pairs reconcile each `GOSSIP_PERIOD`; in M4 (no drops)
+    promotion push already propagates, so reconcile is the backstop whose correctness the convergence
+    property test owns. Partitions/heal + provisional-cert demotion are M6.
+  - `derived_from` wiring in the storm is best-effort (rarely fires when priors are already
+    near-optimal); the requirement is guaranteed by the focused unit test.
+- **Next step:** M5 — Sentinels + bisect + Excision (`tests/test_dilemma_b.py`): subtle poison passes
+  admission, a Sentinel flags it, bisect finds it, Excision removes it + its (now-organic) descendant
+  while unrelated capsules and their reuse behavior are untouched.
+
+---
+
 ## S3 — 2026-07-16 (M3)
 
 - **Session / date:** S3 / 2026-07-16
