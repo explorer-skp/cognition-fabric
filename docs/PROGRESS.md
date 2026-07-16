@@ -15,6 +15,73 @@ memory between sessions: if it isn't written here, the next session doesn't know
 
 ---
 
+## S5 — 2026-07-16 (M5)
+
+- **Session / date:** S5 / 2026-07-16
+- **Milestone(s) completed:** M5 (Sentinels + bisect + Excision — §6.4 complete). Golden-suite
+  probes with one-sided harm KPIs, per-node Sentinel scheduler, in-isolation bisect halving,
+  REVOKE-as-tombstone excision with transitive quarantine, the derived reputation fold wired into
+  Pawl check 5, and current-epoch re-jury for quarantined descendants.
+- **Acceptance criterion result:** `86 passed in 0.60s` (73 prior + 13 new). `tests/test_dilemma_b.py`
+  proves all seven acceptance claims on ONE recorded narrative (module-cached `story()`): (a) **two**
+  subtle poisons by `agent:site-e` (binding decision amendment: two, so isolation is organic) pass the
+  GENUINE pipeline — real Pawl, 3/3 jury on honestly *measured* −44%/−46% `solve_cost` claims (reuse
+  attempts-savings dominate; no thresholds touched, `world/scenarios.py` **untouched** — M5.6's fp
+  knob proved unnecessary), real two-node `shadow_step` records → derived-ACTIVE; (b) the first
+  Sentinel tick ≤ one `PROBE_PERIOD` after promotion raises `DRIFT_ALARM` naming `fp_quarantines`
+  (poison anchors the 3-attempt reuse budget in a bad basin: fp 0→1..2 on in-context goldens);
+  (c) two excise→re-probe passes, each bisect ≤ ⌈log₂ 5⌉+1 probes with a `BISECT` event per step,
+  find exactly {poison1, poison2} — poison2 *masks* poison1 via arbitration until excised; (d) ACTIVE
+  drops 5→2, exactly the poisoned subtree {p1, p2, organic descendant(QUARANTINED)}, never zero; a
+  post-excision `REUSE` fires on the honest capsule; every add incl. both tombstones retained
+  (never-reset); (e) duplicate REVOKEs from a twin node converge by tombstone dominance to the
+  earliest record, stores/ledgers digest-equal; (f) fold: rogue = 1.0 − 2×0.4 = 0.2 < 0.3 → next
+  (honest!) submission dies at Pawl "below isolation floor"; approving jurors slashed −0.2/cert;
+  (g) the quarantined descendant re-juried at a fresh epoch (committee == `select_jury` at that
+  epoch) returns CANDIDATE and re-promotes on exactly 6 post-watermark records.
+  `tests/test_m5_immune.py` units: probe determinism, tombstoned-ancestor derivation block,
+  quarantine watermark (fresh cert + fresh records), reputation fold incl. floor-at-0 and
+  ACCEPT-only juror slash, transitive-closure excise skipping settled states.
+  `make demo-smoke` byte-identical across runs **and vs the M4 tree** (no live-path changes).
+- **Files created/modified:**
+  - New: `fabric/probes.py` (`GOLDEN_SUITE` 12 pinned scenarios, `clean_baselines`, `probe`/
+    `ProbeReport`, `Sentinel`, `suspects`, `bisect_culprit`), `fabric/excision.py` (`descendants`,
+    `excise`/`ExcisionResult`, `reputation` fold, `rejury`), `tests/test_dilemma_b.py`,
+    `tests/test_m5_immune.py`.
+  - Modified: `fabric/config.py` (`PROBE_TOL = DRIFT_THRESHOLD`, `REP_PROMOTION_CREDIT`),
+    `fabric/gossip.py` (`derive_state` gains lineage + quarantine-watermark clauses;
+    `_tombstoned_ancestry`), `fabric/lifecycle.py` (`submit` derives the author's reputation via the
+    fold when no `pawl_ctx` is supplied; optional `ledger`/`node_ids` params).
+- **DECISION comments added:**
+  - `fabric/config.py` — `PROBE_TOL` defined *from* `DRIFT_THRESHOLD` so the M5 name and the §6.4
+    name can never diverge.
+  - `fabric/gossip.py` — decision M5.5's clauses **compose**: an absolute no-tombstoned-ancestor
+    rule would contradict §4's QUARANTINED→re-jury→re-promote path; (a) guards the replication
+    window before the quarantine meta lands, (b) governs after (fresh cert + fresh records only).
+  - `fabric/probes.py` — golden suite is pinned *data*, lives beside its replayer (thresholds stay
+    in config); Sentinel is harness-first like M3's shadow staging (`agents/` outside M5 scope —
+    live tick wiring is M6/M7 demo work); bisect probes halves **in isolation** (disable the
+    window-complement, not the half) because arbitration lets one ACTIVE capsule mask another —
+    in-isolation probing keeps "the window always contains a culprit" true under masking.
+  - `fabric/lifecycle.py` — M5.4 wiring: default `pawl_ctx` derives reputation as the pure fold
+    (lazy import; excision consumes lifecycle's transition guard).
+  - `fabric/excision.py` — quarantine lands only on CANDIDATE/ACTIVE; settled states are skipped,
+    not resurrected.
+- **Known issues / deferred:**
+  - Sentinel `tick()` is not yet called from the live agent loop (scope lock: no `agents/`); M6's
+    chaos loop / M7's demo scripts wire the cadence. Same for emitting BISECT/REVOKE from a demo.
+  - Reputation decay/recovery (Pawl reason says "until decay recovery") still has no decay constant
+    — isolation is currently permanent absent new promotions; revisit if a demo beat needs it.
+  - `rejury` re-assembles the ~15-line quorum-cert dict (shape identical to `validate_capsule`'s);
+    `fabric/jury.py` was out of scope — if M6 touches jury.py, extract a shared `_build_cert`.
+  - Poison arbitration masking is real and documented: a poison masked by a *honest* winner never
+    manifests through the live path, so the Sentinel (correctly) cannot see it as drift.
+- **Next step:** M6 — chaos injector + partition semantics (`tests/test_dilemma_c.py`): partition
+  produces two capsules for one class, heal → deterministic identical arbitration everywhere, then a
+  Refine split; both contexts survive.
+
+---
+
 ## S4 — 2026-07-16 (M4)
 
 - **Session / date:** S4 / 2026-07-16

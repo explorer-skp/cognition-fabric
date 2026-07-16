@@ -144,3 +144,18 @@ DRIFT_THRESHOLD = 0.10              # KPI regression fraction that trips a drift
 REP_AUTHOR_SLASH = 0.4
 REP_JUROR_SLASH = 0.2
 REP_ISOLATION_FLOOR = 0.3
+
+# --- Sentinel probes & Excision (BLUEPRINT §6.4; milestone M5) -----------------
+# One-sided harm tolerance (binding decision M5.1): a probe alarms iff fp_quarantines or sla_burn
+# on any golden scenario exceeds its clean baseline × (1 + PROBE_TOL), or any invariant is hit
+# anywhere. solve_cost may move freely — lowering it is the fabric's purpose; Sentinels guard the
+# KPIs that claims don't cover.
+# DECISION: PROBE_TOL is M5's name for §6.4's drift threshold; defined from DRIFT_THRESHOLD so the
+# two names can never diverge.
+PROBE_TOL = DRIFT_THRESHOLD
+
+# Reputation fold (binding decision M5.4): derived on read, never stored or messaged —
+#   1.0 + REP_PROMOTION_CREDIT·(promotions authored) − REP_AUTHOR_SLASH·(revoked authored)
+#       − REP_JUROR_SLASH·(ACCEPT votes signed in certs of revoked capsules), floored at 0.
+# Below REP_ISOLATION_FLOOR the existing Pawl check 5 auto-rejects the author's submissions.
+REP_PROMOTION_CREDIT = 0.05

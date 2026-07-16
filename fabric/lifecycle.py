@@ -20,7 +20,10 @@ callers pass `stream.emit`; there is no global state and tests stay silent (bind
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
+
+if TYPE_CHECKING:  # typing only — the runtime import stays lazy (see submit)
+    from fabric.gossip import ShadowLedger
 
 from agents.strategist import HeuristicStrategist, Strategist
 from fabric.capsule import Capsule, LifecycleState
@@ -113,12 +116,26 @@ def submit(
     pawl_ctx: PawlContext | None = None,
     strategist: Strategist | None = None,
     emit: Emitter = _noop_emit,
+    ledger: "ShadowLedger | None" = None,
+    node_ids: set[str] | None = None,
 ) -> tuple[LifecycleState, str]:
     """Run one capsule through admission. Returns the resulting state and the pipeline's one-line
     reason (the same string the PAWL_BLOCK / JURY_VERDICT event carries).
 
     Every logical §4 transition is validated (DRAFT → SUBMITTED → Pawl → JURY → …), but only the
     pipeline's *outcome* is persisted — one meta snapshot per sim tick (see `_write_state`)."""
+    if pawl_ctx is None:
+        # DECISION (M5.4 wiring): with no caller-supplied Pawl context, derive the author's
+        # reputation as the pure fold over this node's replicated history (fabric/excision.py) —
+        # reputation is never stored or messaged, so isolation is a derived threshold fact exactly
+        # like ACTIVE. Lazy import: excision consumes this module's transition guard.
+        from fabric.excision import reputation
+
+        pawl_ctx = PawlContext(
+            reputation=reputation(
+                store, capsule.provenance.author, ledger=ledger, node_ids=node_ids
+            )
+        )
     store.add(capsule)
     lifecycle = store.lifecycle_of(capsule.capsule_id)
     state = LifecycleState(lifecycle["state"])

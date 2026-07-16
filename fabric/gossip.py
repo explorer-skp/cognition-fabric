@@ -195,6 +195,24 @@ class DerivedState:
     invariant_hits: int
 
 
+def _tombstoned_ancestry(store: Store, capsule_id: str) -> bool:
+    """True iff the capsule or any transitive `derived_from` ancestor is tombstoned (binding
+    decision M5.5a): a poisoned lineage can never re-derive ACTIVE from its stale records."""
+    seen: set[str] = set()
+    frontier = [capsule_id]
+    while frontier:
+        cid = frontier.pop()
+        if cid in seen:
+            continue
+        seen.add(cid)
+        if store.is_tombstoned(cid):
+            return True
+        capsule = store.adds.get(cid)
+        if capsule is not None:
+            frontier.extend(capsule.provenance.derived_from)
+    return False
+
+
 def derive_state(
     store: Store,
     ledger: ShadowLedger,
@@ -207,16 +225,41 @@ def derive_state(
     SHADOW_MIN_NODES distinct nodes, with wins ≥ SHADOW_QUORUM_WIN and zero invariant hits. Otherwise
     the capsule reads at its meta/authored state (CANDIDATE once a cert is present). Monotone: records
     only accumulate, so a capsule never leaves ACTIVE by this function (no flapping).
+
+    Excision facts scope that monotonicity (binding decision M5.5): a tombstoned capsule never
+    promotes; a capsule with a tombstoned *ancestor* never promotes until Excision's
+    QUARANTINED(sim_time) watermark lands — and once it has, only shadow records and a quorum cert
+    *newer than the latest quarantine* count, so a quarantined capsule re-earns promotion with a
+    current-epoch re-jury plus fresh records, never by replaying stale glory. Absent excision facts
+    the M4 behavior is unchanged.
+
+    # DECISION: clauses (a) and (b) of decision M5.5 compose rather than stack absolutely — an
+    # absolute no-tombstoned-ancestor rule would contradict §4's QUARANTINED → re-jury → re-promote
+    # path (the ancestor stays tombstoned forever). (a) guards the replication window where the
+    # REVOKE tombstone arrived but the quarantine meta has not; (b) governs after quarantine.
     """
+    lifecycle = store.lifecycle_of(capsule_id)
+    quarantined_at = (lifecycle or {}).get("quarantined_at")
     verified = [r for r in ledger.records_for(capsule_id) if verify_shadow_record(r, node_ids)]
+    if quarantined_at is not None:
+        verified = [r for r in verified if r.sim_time > float(quarantined_at)]
     wins = sum(1 for r in verified if r.win)
     inv = sum(r.invariant_hits for r in verified)
     nodes = len({r.node_id for r in verified})
+    cert_fresh = True
+    if quarantined_at is not None:
+        cert = (lifecycle or {}).get("quorum_cert") or {}
+        cert_fresh = float(cert.get("sim_time", -1.0)) > float(quarantined_at)
+    lineage_ok = not store.is_tombstoned(capsule_id) and (
+        quarantined_at is not None or not _tombstoned_ancestry(store, capsule_id)
+    )
     promoted = (
         len(verified) >= SHADOW_QUORUM_N
         and nodes >= SHADOW_MIN_NODES
         and wins >= SHADOW_QUORUM_WIN
         and inv == 0
+        and cert_fresh
+        and lineage_ok
     )
     if promoted:
         return DerivedState(
@@ -227,7 +270,6 @@ def derive_state(
             wins=wins,
             invariant_hits=inv,
         )
-    lifecycle = store.lifecycle_of(capsule_id)
     base = LifecycleState(lifecycle["state"]) if lifecycle is not None else None
     return DerivedState(
         state=base,
