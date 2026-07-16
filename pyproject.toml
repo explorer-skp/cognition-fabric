@@ -1,0 +1,23 @@
+[project]
+name = "cognition-fabric"
+version = "0.1.0"
+description = "Cognition Fabric — Phase 2 prototype (Team Beacon, Code With Cisco)"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["fabric", "world", "agents", "ui", "demo"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
