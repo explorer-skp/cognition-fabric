@@ -1,4 +1,4 @@
-.PHONY: setup test demo-smoke demo-ratchet demo-chaos clean-state
+.PHONY: setup test demo-smoke demo-ratchet demo-chaos demo-persist clean-state
 
 # Python 3.11+ managed with uv; runs fully offline once deps are installed.
 setup:
@@ -16,6 +16,10 @@ demo-ratchet:
 
 demo-chaos:
 	uv run python -m demo.demo_chaos
+
+# Manual check for M2 persistence: crash a node store and reload it from the .state JSONL log.
+demo-persist:
+	uv run python -m demo.demo_persist
 
 # Wipe per-node persistence and the event stream.
 clean-state:

@@ -15,6 +15,42 @@ memory between sessions: if it isn't written here, the next session doesn't know
 
 ---
 
+## S2 — 2026-07-16 (M2)
+
+- **Session / date:** S2 / 2026-07-16
+- **Milestone(s) completed:** M2 (Capsule schema + signing + OR-set store + JSONL persistence +
+  restart-reload).
+- **Acceptance criterion result:** `32 passed in 0.15s` (20 prior + 12 new in
+  `tests/test_m2_capsule_store.py`). Acceptance test `test_crash_reload_roundtrip`: a `PersistentStore`
+  with 3 adds + 1 tombstone + 2 meta updates is dropped ("crash") and reloaded from
+  `.state/<agent>/store.jsonl` with full store equality, tombstone dominance, and latest-lifecycle
+  state intact. `test_crash_at_append_boundary_reloads_cleanly` proves a truncated final line reloads
+  cleanly. `make demo-persist` is the manual form (crash→reload story prints identically). `make
+  demo-smoke` output unchanged (M2 touches no demo/world path).
+- **Files created/modified:**
+  - New: `fabric/keyring.py` (HMAC dev keyring, §13 stub), `fabric/capsule.py` (pydantic §3 schema +
+    `LifecycleState` enum + `canonical_body`/`compute_id`/`build_capsule`/`check_integrity`),
+    `fabric/store.py` (`Store` pure OR-set + `PersistentStore` JSONL wrapper),
+    `tests/test_m2_capsule_store.py`, `demo/demo_persist.py`.
+  - Modified: `Makefile` (+`demo-persist` target and `.PHONY`).
+- **DECISION comments added:**
+  - `fabric/keyring.py` — dev keys derived deterministically from identity via domain-separated
+    SHA-256; drop-in for real PKI, interface unchanged (§13).
+  - `fabric/capsule.py` — `check_integrity` named distinctly from M3's `validate_capsule()`
+    (Pawl/Jury), which M2 does not build.
+  - `fabric/store.py` — meta update is a full-snapshot LWW replace (no per-field merge); tombstone
+    merge keeps the deterministic-min `(sim_time, reason)` so merge stays commutative/associative;
+    `.state` root is a path literal (default arg), not a config threshold; on load, a corrupt line is
+    tolerated ONLY as the final line (crash mid-append) — earlier corruption raises (fail-secure).
+- **Known issues / deferred:**
+  - `capsule_id`/`sig` cover the immutable body only; `lifecycle` is mutable node-local metadata,
+    excluded from both (binding decision M2.1) and carried via `metas` LWW.
+  - `Store.merge` is the CRDT primitive gossip (M4) will drive; no gossip/anti-entropy wired yet.
+  - Lifecycle is an enum only — no transition machine, Pawl, or Jury (M3).
+- **Next step:** M3 — Pawl + Jury + lifecycle transitions + shadow staging; `tests/test_dilemma_a.py`.
+
+---
+
 ## S1 — 2026-07-16 (M0 + M1)
 
 - **Session / date:** S1 / 2026-07-16
