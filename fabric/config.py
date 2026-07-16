@@ -51,10 +51,25 @@ DEFAULT_ACTION: dict = {
     "rate_limit_pps": 6000,
     "inspection_depth": 2,
     "quarantine_scope": "flagged_only",
-    "retry_backoff_ms": 200,
+    "retry_backoff_ms": 400,   # off every class optimum on purpose: cold discovery must cost
     "sampled_fraction": 0.5,
-    "block_ttl_s": 120,
+    "block_ttl_s": 300,
 }
+
+# --- Agents & Strategist (BLUEPRINT §8) --------------------------------------
+MAX_ATTEMPTS = 12  # bounded local search: "hill-climb over the quantized action space, ≤ 12 attempts"
+
+# The five site agents in the enterprise mesh (id, site_class). site-e can be flipped rogue by the
+# chaos injector (BLUEPRINT §8); site classes span branch/campus/dc.
+AGENTS: tuple[tuple[str, str], ...] = (
+    ("site-a", "branch"),
+    ("site-b", "campus"),
+    ("site-c", "dc"),
+    ("site-d", "branch"),
+    ("site-e", "campus"),
+)
+
+STORM_SIZE = 60  # tasks in a demo "storm" (BLUEPRINT §11: storm of ~60 tasks)
 
 # --- TaskGen (BLUEPRINT §8: Poisson arrivals + drift, fully seeded) ----------
 TASKGEN_LAMBDA_BASE = 0.5           # base arrival rate (tasks per sim-second)
