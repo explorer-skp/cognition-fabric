@@ -26,13 +26,19 @@ INCIDENT_CLASSES: tuple[str, ...] = (
 SITE_CLASSES: tuple[str, ...] = ("branch", "campus", "dc")
 
 # --- Cost model (BLUEPRINT §8) ----------------------------------------------
-# solve_cost = 2.0*attempts + 0.05*time_to_mitigate_s + 5.0*fp_quarantines
-#            + 1.0*sla_burn + 25.0*invariant_hits
-COST_W_ATTEMPT = 2.0
-COST_W_TIME = 0.05
-COST_W_FP = 5.0
-COST_W_SLA = 1.0
-COST_W_INVARIANT = 25.0
+# solve_cost = 3.0*attempts + 0.075*time_to_mitigate_s + 7.5*fp_quarantines
+#            + 1.5*sla_burn + 37.5*invariant_hits
+# DECISION (M7 tuning): every weight scaled by a single factor (1.5x the M0 baseline) to land
+# absolute solve-cost numbers in BLUEPRINT §11's target band. A uniform scale of every term leaves
+# every ratio-based threshold in the pipeline (MIN_EFFECT, CLAIM_TOL, AUTHOR_MIN_EFFECT, PROBE_TOL,
+# and every capsule's claimed delta_pct) mathematically unchanged: solve_cost(k*w) = k*solve_cost(w)
+# for any fixed (attempts, metrics), so (v1*k - v0*k)/(v0*k) == (v1-v0)/v0. Verified against the full
+# suite (dilemma A/B percentage thresholds untouched) rather than trusted on math alone.
+COST_W_ATTEMPT = 3.0
+COST_W_TIME = 0.075
+COST_W_FP = 7.5
+COST_W_SLA = 1.5
+COST_W_INVARIANT = 37.5
 
 # --- Quantized action space (BLUEPRINT §8: bounded local search) -------------
 # The Strategist hill-climbs over these discrete choices. Registry dimensions only.

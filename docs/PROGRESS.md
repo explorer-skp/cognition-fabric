@@ -15,6 +15,81 @@ memory between sessions: if it isn't written here, the next session doesn't know
 
 ---
 
+## S6 — 2026-07-16 (M7 — M6 deliberately skipped)
+
+- **Session / date:** S6 / 2026-07-16
+- **Milestone(s) completed:** M7 (TUI + demo scripts). **M6 (chaos injector + partition semantics)
+  was explicitly NOT built this session** — on direct instruction, this session jumped M5 → M7
+  rather than follow BLUEPRINT's strict M0→M7 build order. This is a deliberate, acknowledged
+  deviation, not an oversight: `tests/test_dilemma_c.py` does not exist, there is no
+  `chaos/injector.py`, and RUNBOOK Act 3's partition/heal/Refine/minority-cert-demotion beats
+  (8:45–10:15) are not implemented. `demo-chaos` says so explicitly at that beat instead of faking
+  it. Dilemma C (BLUEPRINT §7) is therefore only two-thirds demonstrable: storage-eventually-
+  consistent (CRDT merge, M4) and decisions-deterministic (`arbitrate()`, M4) are real; meaning-is-
+  scoped (partition-driven Refine) is not.
+- **Acceptance criterion result:** `104 passed in 0.62s` (86 prior + 18 new, `tests/test_m7_dashboard.py`).
+  `make demo-smoke`, `make demo-ratchet`, `make demo-chaos` each byte-identical across two runs.
+  `demo-ratchet --pace=live` completes in ~30s; `demo-chaos --pace=live` in ~75s — both individually
+  well under their RUNBOOK act budgets (360s, 270s) and far under the ≤12 min M7 accept criterion;
+  a single combined `ratchet && chaos` timed dry-run was not completed this session (interrupted;
+  the two scripts' independent timings already bound the total).
+- **Files created/modified:**
+  - New: `ui/tui.py` (`DashboardState`, pure panel builders `mesh_table`/`fabric_table`/
+    `ratchet_panel`/`economics_panel`/`event_log_panel`, `render_dashboard`, reducers
+    `build_mesh_rows`/`build_fabric_rows`, the I/O `Dashboard` Live driver), `tests/test_m7_dashboard.py`,
+    `README.md`.
+  - Modified: `fabric/config.py` (cost weights uniformly scaled ×1.5), `demo/demo_ratchet.py` (full
+    RUNBOOK Acts 0–2: cold open, twin-lane A/B, AUTHOR/JURY/PROMOTED/REUSE narration, a *live*
+    crash+restart-with-memory beat), `demo/demo_chaos.py` (full RUNBOOK Act 3 up through Excision:
+    pre-warmed 12-capsule fabric, blatant + subtle poison, Sentinel/bisect/Excision, honest M6
+    deferral note).
+- **DECISION comments added:**
+  - `fabric/config.py` — every `COST_W_*` weight scaled by a single factor (1.5×). Proven
+    `delta_pct`-neutral both analytically (`solve_cost(k·w) = k·solve_cost(w)` for fixed
+    `(attempts, metrics)`, so every ratio-based threshold — MIN_EFFECT, CLAIM_TOL,
+    AUTHOR_MIN_EFFECT, PROBE_TOL, every capsule's claimed delta — is unchanged) and empirically
+    (full suite green before and after). Lands `demo-smoke`'s discovery medians at 28.0/31.6
+    (BLUEPRINT §11 target 25–35). **Rejected**: `REUSE_REFINE_MAX` 2→1 as a lever to shrink the
+    reuse/discovery ratio toward the 4–8 target — broke 8 tests (the derived-descendant mechanism
+    in `test_m4_gossip_reuse.py` and all of `test_dilemma_b.py`) because every capsule's claim is
+    measured through the *same* solve path (binding decision M3.1); reverted. The reuse/discovery
+    ratio (~0.43) is therefore architecturally intrinsic to the current cost model — reuse_median
+    (~13.6) stays above the 4–8 target, accepted rather than risking the dilemma tests' soundness.
+  - `demo/demo_ratchet.py` — a demo-local storm shape (`n=80, funnel=15`, not the global
+    `STORM_SIZE=60`) lands Lane A's savings at 40.5% (target 40–50%) and lead time at 6.5 sim-s
+    (target 3–6) without touching any fabric constant; `demo_smoke.py`/`STORM_SIZE` untouched.
+    Crash/restart-with-memory: the store round-trips through a real `PersistentStore` (M2's
+    guarantee, re-proven live, asserted equal); the shadow ledger is reset to empty on "crash"
+    (unpersisted per M4's own design) and re-syncs from peers via the mesh loop's *ordinary*
+    anti-entropy — no special-cased recovery path.
+  - `demo/demo_chaos.py` — honest capsules' context bands are deliberately kept outside the
+    poison's golden-suite regression footprint (traffic 4/6/7/8); an overlapping honest capsule
+    would win arbitration there and mask the poison from the Sentinel — the same masking
+    `fabric/probes.py`'s in-isolation bisect exists to survive, now visible at the demo-authoring
+    level too. Seeds are derived via `hashlib.sha256`, never Python's built-in `hash()` — the
+    latter is per-process salted (`PYTHONHASHSEED`) and would have silently broken byte-identical
+    output across runs; caught and fixed before it shipped.
+  - `ui/tui.py` — panel builders are pure (data → Rich renderable, no I/O), unit-tested via
+    `Console(record=True)`; only `Dashboard` (the `Live` wrapper) touches a terminal. Reputation is
+    accepted as an externally-supplied field on `DashboardState` rather than derived purely from
+    the event stream, since it is itself a pure fabric query (`fabric.excision.reputation`) the
+    event log never carries as a field.
+- **Known issues / deferred:**
+  - M6 in full: chaos injector, partition/heal, Refine, minority-cert demotion, `tests/test_dilemma_c.py`.
+  - `docs/DEMO_RUNBOOK.md` was not edited to reflect the M6 gap — `demo/demo_chaos.py` prints the
+    deferral inline instead; a future session touching M6 should also update the RUNBOOK doc.
+  - reuse_median (~13.6) remains above BLUEPRINT §11's 4–8 target band — architecturally tied to
+    the shared solve path; would need a redesign of the claim-measurement path (out of scope for a
+    "no mistakes" tuning pass) to close further.
+  - A single end-to-end timed `ratchet && chaos --pace=live` dry-run was not completed (session
+    interrupted); each script was independently timed well under its own RUNBOOK act budget.
+- **Next step:** M6 — chaos injector + partition semantics (`tests/test_dilemma_c.py`): partition
+  produces two capsules for one class, heal produces deterministic identical arbitration on every
+  node, then a Refine split; both contexts survive. Then fold the M6 beats into `demo-chaos` and
+  update `docs/DEMO_RUNBOOK.md`'s Act 3 accordingly.
+
+---
+
 ## S5 — 2026-07-16 (M5)
 
 - **Session / date:** S5 / 2026-07-16
