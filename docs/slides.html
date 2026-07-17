@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cognition Fabric · Team Beacon</title>
+<style>
+  :root {
+    --ink: #14202b;
+    --muted: #5b6a78;
+    --accent: #0079b8;
+    --accent-dark: #005a8a;
+    --accent-soft: #eaf5fb;
+    --line: #dde4ea;
+    --bg: #fcfdfe;
+    --card: #ffffff;
+    --term-bg: #12171d;
+    --term-ink: #d8e1e8;
+    --term-red: #ff7373;
+    --term-green: #5bd579;
+    --term-cyan: #6fd9e6;
+    --term-mag: #ef7cab;
+    --term-dim: #8b98a5;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-snap-type: y mandatory; }
+  body {
+    font-family: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+  }
+  .slide {
+    width: 100vw; height: 100vh;
+    scroll-snap-align: start;
+    padding: 3.4vh 4.5vw 4.6vh;
+    display: flex; flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+  /* top accent band instead of a side bar: calmer, frames the title */
+  .slide::before {
+    content: ""; position: absolute; left: 0; top: 0; right: 0;
+    height: .9vh;
+    background: linear-gradient(90deg, var(--accent-dark), var(--accent) 40%, #35a3d4);
+  }
+  .head { margin-bottom: 1.8vh; }
+  .kicker {
+    font-size: 1.5vh; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--accent-dark); font-weight: 700; margin-bottom: .7vh;
+  }
+  h1 { font-size: 4.3vh; font-weight: 700; line-height: 1.14; letter-spacing: -0.012em; }
+  .subtitle { font-size: 1.9vh; color: var(--muted); margin-top: .8vh; }
+  h2 {
+    font-size: 2.05vh; font-weight: 700; margin-bottom: 1vh; color: var(--ink);
+    display: flex; align-items: center; gap: .8vh;
+  }
+  h2::before { content: ""; width: 2.4vh; height: .45vh; border-radius: 3px; background: var(--accent); }
+  p, li { font-size: 2vh; line-height: 1.45; color: var(--ink); }
+  .muted { color: var(--muted); }
+  ul { list-style: none; }
+  ul li { padding-left: 1.7vh; position: relative; margin-bottom: 1vh; }
+  ul li::before { content: ""; position: absolute; left: 0; top: .82vh; width: .68vh; height: .68vh;
+                  border-radius: 50%; background: var(--accent); }
+  .cols { display: flex; gap: 2.6vw; flex: 1; min-height: 0; }
+  .col { flex: 1; min-width: 0; }
+  .footer {
+    position: absolute; bottom: 1.4vh; left: 4.5vw; right: 4.5vw;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 1.4vh; color: var(--muted);
+    border-top: 1px solid var(--line); padding-top: .9vh;
+  }
+  .footer .no { font-weight: 700; color: var(--accent-dark); }
+  .card {
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 1.5vh 1.7vh; margin-bottom: 1.3vh; background: var(--card);
+    box-shadow: 0 1px 2px rgba(20, 32, 43, .04);
+  }
+  .card h2 { margin-bottom: .7vh; }
+  .card p { font-size: 1.85vh; }
+  .quote {
+    background: var(--accent-soft); border-left: 4px solid var(--accent);
+    padding: 1.4vh 1.8vh; border-radius: 0 10px 10px 0; margin-top: 1.4vh;
+    font-size: 2.05vh; line-height: 1.42;
+  }
+  table { border-collapse: collapse; width: 100%; background: var(--card);
+          border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: .82vh 1.1vh; font-size: 1.8vh; line-height: 1.32;
+           border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  th { color: #fff; background: var(--accent-dark); font-weight: 600; font-size: 1.55vh;
+       text-transform: uppercase; letter-spacing: .07em; }
+  td:first-child { font-weight: 700; white-space: nowrap; color: var(--accent-dark); }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.2vh; margin-top: 1.2vh; }
+  .stat {
+    border: 1px solid var(--line); border-top: 3px solid var(--accent);
+    border-radius: 10px; padding: 1.3vh 1.2vh; background: var(--card);
+    box-shadow: 0 1px 2px rgba(20, 32, 43, .04);
+  }
+  .stat .n { font-size: 3.1vh; font-weight: 700; color: var(--accent-dark); line-height: 1.1;
+             white-space: nowrap; }
+  .stat .l { font-size: 1.52vh; color: var(--muted); margin-top: .5vh; line-height: 1.32; }
+  .term {
+    background: var(--term-bg); color: var(--term-ink);
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 1.6vh; line-height: 1.52;
+    border-radius: 10px; padding: 1.3vh 1.5vh; margin-bottom: 1.15vh;
+    white-space: pre-wrap; word-break: break-word;
+    border: 1px solid #232b34;
+  }
+  .term .r { color: var(--term-red); } .term .g { color: var(--term-green); }
+  .term .c { color: var(--term-cyan); } .term .m { color: var(--term-mag); }
+  .term .d { color: var(--term-dim); }
+  .term-title { font-size: 1.5vh; color: var(--muted); margin-bottom: .45vh; font-weight: 700;
+                letter-spacing: .04em; text-transform: uppercase; }
+  /* pipeline strip: single row, never wraps */
+  .flow {
+    display: flex; align-items: stretch; flex-wrap: nowrap; gap: .55vw;
+    margin-top: 1.5vh; width: 100%;
+  }
+  .flow .step {
+    flex: 1; display: flex; flex-direction: column; justify-content: center;
+    border: 1.5px solid var(--accent); border-radius: 8px;
+    padding: .8vh .4vw; background: var(--accent-soft); text-align: center;
+    min-width: 0;
+  }
+  .flow .step b { font-size: 1.62vh; font-weight: 700; color: var(--accent-dark); white-space: nowrap; }
+  .flow .step span { font-size: 1.28vh; color: var(--muted); white-space: nowrap; }
+  .flow .arrow { align-self: center; color: var(--accent); font-size: 2vh; flex: 0 0 auto; }
+  @media print {
+    html { scroll-snap-type: none; }
+    .slide { height: 100vh; page-break-after: always; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================ SLIDE 1 ============================ -->
+<section class="slide" id="s1">
+  <div class="head">
+    <div class="kicker">Team Beacon · Code with Cisco · Phase 2: The Continuous Mesh and the Ratchet Effect</div>
+    <h1>Cognition Fabric: a shared memory that agents have to earn</h1>
+    <div class="subtitle">Soumyakanta Panda · Balla Pranava Chaitanya · Srujan K R</div>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <h2>The problem we solve</h2>
+      <ul>
+        <li>A mesh of autonomous agents solves incidents all day, then forgets. Every site pays full discovery cost for the same problem, and a restart wipes the learning.</li>
+        <li>Naively sharing what agents "learned" is worse: hallucinated fixes spread, poisoned knowledge persists, and two sites can hold conflicting fixes that are both valid in their own contexts.</li>
+        <li>Phase 2 asks for a fabric that captures a local breakthrough, verifies it autonomously before acceptance, propagates it fast, and shows measurable reuse. Poison removal must work without resetting collective memory.</li>
+      </ul>
+      <div class="quote">Phase 1 was <b>contracts, not conversations</b>. Phase 2 is <b>evidence, not claims</b>: nothing enters collective memory because an agent said so. It enters because its claim survived re-execution.</div>
+    </div>
+    <div class="col">
+      <h2>Methodology</h2>
+      <ul>
+        <li>An insight is a <b>capsule</b>: a typed decision rule carrying a falsifiable claim, the seeds to replay it, its scope, and its provenance. Never free text, so machines can verify it.</li>
+        <li>Validation is execution. A jury of 3 agents, picked by the capsule's own hash so nobody can choose the committee, replays the claim with and without the capsule on scenarios the author never saw.</li>
+        <li>The guardrail (<b>the Pawl</b>) is structural: capsules may tighten safety bounds, never loosen them. Loosening needs a signed human token.</li>
+        <li>We assume some poison still gets in. Sentinel probes re-test active memory on a pinned golden suite, a bisect finds the culprit in log time, and excision removes exactly the poisoned subtree.</li>
+        <li>Consistency in three layers: storage is a CRDT that merges without conflicts, meaning is scoped per context, and decisions come from one pure function that gives the same answer on every node.</li>
+      </ul>
+      <div class="flow">
+        <div class="step"><b>Pawl</b><span>static checks</span></div>
+        <div class="arrow">→</div>
+        <div class="step"><b>Jury</b><span>replays claim</span></div>
+        <div class="arrow">→</div>
+        <div class="step"><b>Cert</b><span>2 of 3 sign</span></div>
+        <div class="arrow">→</div>
+        <div class="step"><b>Shadow</b><span>mesh-wide</span></div>
+        <div class="arrow">→</div>
+        <div class="step"><b>ACTIVE</b><span>derived locally</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="footer"><span>Cognition Fabric · Team Beacon</span><span class="no">1 / 4</span></div>
+</section>
+
+<!-- ============================ SLIDE 2 ============================ -->
+<section class="slide" id="s2">
+  <div class="head">
+    <div class="kicker">What is completed</div>
+    <h1>All eight milestones built, tested, and demoable</h1>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <table>
+        <tr><th>Milestone</th><th>Delivered</th></tr>
+        <tr><td>M0 World</td><td>Simulated clock and bus, 3 incident classes, cost model, drifting task generator (Poisson arrivals, class mix and parameter drift)</td></tr>
+        <tr><td>M1 Baseline</td><td>5 site agents solving with bounded search, fabric off: the measured amnesia problem</td></tr>
+        <tr><td>M2 Store</td><td>Capsule schema, HMAC signing, content addressing, CRDT OR-set store, per-node JSONL persistence, crash and reload proven</td></tr>
+        <tr><td>M3 Validation</td><td>Pawl checks, hash-sortition jury, counterfactual replay, author-blind held-out scenarios, invariant checks, quorum certificates</td></tr>
+        <tr><td>M4 Mesh</td><td>Gossip anti-entropy, mesh-wide shadow staging with derived promotion, reuse before solve, twin-lane A/B economics</td></tr>
+        <tr><td>M5 Immune</td><td>Sentinel golden-suite probes, provenance bisect, excision with transitive quarantine, reputation slashing</td></tr>
+        <tr><td>M6 Chaos</td><td>Fault injector: partition, heal, node crash; minority-island cert demotion; Refine split on persistent overlap</td></tr>
+        <tr><td>M7 Demo</td><td>Live dashboard (5 panels) and two scripted, fully deterministic demos</td></tr>
+      </table>
+    </div>
+    <div class="col">
+      <h2>The three dilemmas are answered as running code</h2>
+      <div class="card">
+        <h2>A. Innovation vs. hallucination</h2>
+        <p>A fabricated claim dies at counterfactual replay. A cherry-picked claim dies on author-blind scenarios. A true but unsafe gain dies at the invariant check. Each is a test that runs in front of you: <span class="muted">tests/test_dilemma_a.py</span></p>
+      </div>
+      <div class="card">
+        <h2>B. Drift and poisoning</h2>
+        <p>A subtle poison that honestly improves its claimed metric passes admission, then a sentinel catches the damage on a metric nobody claimed. Bisect, excise, slash reputation. Memory goes 12 to 10, never to zero. <span class="muted">tests/test_dilemma_b.py</span></p>
+      </div>
+      <div class="card">
+        <h2>C. Consistency at scale</h2>
+        <p>A partition lets two islands learn different valid fixes. Heal is a set union, every node arbitrates identically, and a Refine split lets both truths survive with sharper scopes. <span class="muted">tests/test_dilemma_c.py</span></p>
+      </div>
+      <p class="muted" style="font-size:1.8vh">110 tests pass in under a second, including a determinism test: both demos produce byte-identical output on every run, chaos included.</p>
+    </div>
+  </div>
+  <div class="footer"><span>Cognition Fabric · Team Beacon</span><span class="no">2 / 4</span></div>
+</section>
+
+<!-- ============================ SLIDE 3 ============================ -->
+<section class="slide" id="s3">
+  <div class="head">
+    <div class="kicker">Tools, technologies, and implementation highlights</div>
+    <h1>Small toolset, production-grade patterns, measured results</h1>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <h2>Tools and technologies</h2>
+      <p style="font-size:1.9vh">Python 3.11 with asyncio, pydantic for typed schemas, rich for the dashboard, pytest, uv for the environment. Everything else is the standard library: hashlib, hmac, json, seeded random. No database, no network calls, no blockchain library. Installs in seconds and runs fully offline.</p>
+      <h2 style="margin-top:1.6vh">Patterns we borrowed from real systems</h2>
+      <table>
+        <tr><td>git</td><td>content-addressed capsules, provenance DAG, and bisect over memory</td></tr>
+        <tr><td>Dynamo, Cassandra</td><td>CRDT OR-set store, gossip anti-entropy, tombstones, AP under partition</td></tr>
+        <tr><td>Algorand</td><td>jury selection by hash sortition, so committees cannot be targeted</td></tr>
+        <tr><td>Proof-of-stake</td><td>reputation slashing for authors and for jurors who signed a bad cert</td></tr>
+        <tr><td>Canary + CI</td><td>shadow staging before activation, golden-suite regression probes</td></tr>
+        <tr><td>FoundationDB</td><td>deterministic simulation testing: seeded randomness, replayable faults</td></tr>
+        <tr><td>Cisco Talos</td><td>validated intelligence pushed fleet-wide; we mechanize that loop for operational insights</td></tr>
+      </table>
+    </div>
+    <div class="col">
+      <h2>Numbers from the actual run (fixed seeds, controlled A/B)</h2>
+      <div class="stats">
+        <div class="stat"><div class="n">40.5%</div><div class="l">total cost saved with fabric on vs off, same 80-task storm, same seed</div></div>
+        <div class="stat"><div class="n">0.43x</div><div class="l">median reuse cost vs discovery cost for a repeat incident</div></div>
+        <div class="stat"><div class="n">6.5 s</div><div class="l">median sim-time from local discovery to fleet-wide availability</div></div>
+        <div class="stat"><div class="n">110</div><div class="l">tests, all green in under a second, determinism included</div></div>
+        <div class="stat"><div class="n">4</div><div class="l">probes to isolate 1 poisoned capsule among 12 (log&#8322; bisect)</div></div>
+        <div class="stat"><div class="n">12 → 10</div><div class="l">excision removes exactly the poisoned subtree, never resets memory</div></div>
+        <div class="stat"><div class="n">6 + 2</div><div class="l">signed shadow records from 2+ distinct nodes before any capsule turns active</div></div>
+        <div class="stat"><div class="n">O(caps)</div><div class="l">propagation cost across the mesh, no per-pair channels, no N&#178;</div></div>
+      </div>
+      <p class="muted" style="margin-top:1.3vh; font-size:1.78vh">Scale honesty: transport is an in-process bus (the problem statement allows simulation). Every algorithm above it, gossip, sortition, certificates, CRDT merge, is real and transport-agnostic. The economics claim is the controlled A/B shape, not the absolute numbers.</p>
+    </div>
+  </div>
+  <div class="footer"><span>Cognition Fabric · Team Beacon</span><span class="no">3 / 4</span></div>
+</section>
+
+<!-- ============================ SLIDE 4 ============================ -->
+<section class="slide" id="s4">
+  <div class="head">
+    <div class="kicker">Live demo · everything below is real output, byte-identical on every run</div>
+    <h1>What you are about to see</h1>
+  </div>
+  <div class="cols">
+    <div class="col">
+      <h2>Demo 1: the ratchet (about 40 s)</h2>
+      <ul>
+        <li>Fabric off: two sites pay full price for the same incident, a crash loses everything.</li>
+        <li>Fabric on: site-a authors a capsule, a hash-picked jury accepts it, promotion is derived across the mesh, site-c reuses it at half the cost.</li>
+        <li>site-d crashes again and restarts with memory. Same crash, different outcome.</li>
+      </ul>
+      <h2 style="margin-top:1.4vh">Demo 2: chaos (about 100 s)</h2>
+      <ul>
+        <li>A blatant poison is blocked live, reason on screen.</li>
+        <li>A subtle poison honestly passes admission, a sentinel catches it on a metric nobody claimed, bisect finds it in 4 probes, excision takes memory from 12 to 10.</li>
+        <li>A partition splits the mesh, both islands keep learning, heal converges every node on the identical decision, and a Refine split keeps both truths.</li>
+      </ul>
+      <div class="quote">Every run is seeded. What you see live is exactly what we rehearsed, and you are welcome to re-run it.</div>
+    </div>
+    <div class="col">
+      <div class="term-title">The guardrail, live</div>
+      <div class="term"><span class="r">PAWL_BLOCK</span>: ratchet monotonicity: unknown action dimension 'allowlist_subnet'. Control-plane vocabulary is registry-only</div>
+      <div class="term-title">Memory has CI</div>
+      <div class="term"><span class="m">DRIFT_ALARM</span>: fp_quarantines 1 &gt; baseline 0 x (1+0.1) on golden-02-ddos_syn_flood under capsule 3598ef047e</div>
+      <div class="term-title">Surgical removal, not amnesia</div>
+      <div class="term"><span class="m">REVOKE</span>: 3598ef047e tombstoned
+<span class="m">QUARANTINE</span>: 71e541234f, descendant, re-jury required
+12 capsules to 10. <b>Not to zero.</b></div>
+      <div class="term-title">No split-brain after heal</div>
+      <div class="term">agent:site-a decides: <span class="g">b6f953d325</span>  |  agent:site-e decides: <span class="g">b6f953d325</span>  <span class="d">identical on all 5 nodes</span>
+<span class="c">REFINE</span>: split along 'traffic_gbps' at 5.5, both capsules survive, scoped</div>
+      <div class="term-title">The result</div>
+      <div class="term"><span class="g">Lane A saved 40.52% vs Lane B over 80 tasks</span>  <span class="d">(same seed, fabric on vs off)</span></div>
+    </div>
+  </div>
+  <div class="footer"><span>Cognition Fabric · Team Beacon</span><span class="no">4 / 4</span></div>
+</section>
+
+<script>
+  const slides = [...document.querySelectorAll('.slide')];
+  let idx = 0;
+  function go(i) {
+    idx = Math.max(0, Math.min(slides.length - 1, i));
+    slides[idx].scrollIntoView({ behavior: 'smooth' });
+  }
+  document.addEventListener('keydown', (e) => {
+    if (['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); go(idx + 1); }
+    if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); go(idx - 1); }
+  });
+</script>
+</body>
+</html>
